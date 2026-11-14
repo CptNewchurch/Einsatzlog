@@ -1,5 +1,5 @@
 import { db } from './db';
-import type { Bereich, KatalogEintrag, MassnahmeArt, Typ } from '../domain/types';
+import type { Bereich, FwGruppe, KatalogEintrag, MassnahmeArt, Typ } from '../domain/types';
 
 // Startwerte. Alles Weitere legst du beim Erfassen selbst an; die Listen wachsen mit.
 // Die Maßnahmen und Medikamente entsprechen den SAA im Gemeinsamen Kompendium Rettungsdienst 2026.
@@ -146,12 +146,91 @@ export const DIAGNOSEN: string[] = [
 ];
 
 /**
+ * Typische Maßnahmen im Feuerwehreinsatz. Sie werden auf Befehl ausgeführt und deshalb ohne
+ * Rechtsgrundlage erfasst. Die Liste ist ein Anfang: eigene Maßnahmen legst du beim Erfassen an.
+ */
+export const FW_MASSNAHMEN: { gruppe: FwGruppe; namen: string[] }[] = [
+  {
+    gruppe: 'rettung',
+    namen: [
+      'Personensuche',
+      'Menschenrettung aus Gefahrenbereich',
+      'Rettung über Drehleiter',
+      'Technische Rettung (Verkehrsunfall)',
+      'Rettung aus Höhen und Tiefen',
+      'Tragehilfe für den Rettungsdienst',
+      'Erste Hilfe und Betreuung',
+    ],
+  },
+  {
+    gruppe: 'brand',
+    namen: [
+      'Erkundung',
+      'Löschangriff im Innenangriff',
+      'Löschangriff im Außenangriff',
+      'Riegelstellung',
+      'Wasserversorgung herstellen',
+      'Belüftung und Entrauchung',
+      'Schaumeinsatz',
+      'Nachlöscharbeiten und Brandnachschau',
+    ],
+  },
+  {
+    gruppe: 'technik',
+    namen: [
+      'Hydraulisches Rettungsgerät',
+      'Fahrzeug sichern und stabilisieren',
+      'Türöffnung (Notöffnung)',
+      'Aufzugbefreiung',
+      'Motorsäge (Baum, Sturmschaden)',
+      'Wasser abpumpen',
+      'Ölspur abstreuen',
+      'Heben und Abstützen',
+    ],
+  },
+  {
+    gruppe: 'gefahrstoff',
+    namen: ['Messen (Gas, CO, Ex)', 'Dekontamination', 'Stoff abdichten und auffangen', 'Einsatz im Chemikalienschutzanzug'],
+  },
+  {
+    gruppe: 'sonstige',
+    namen: [
+      'Absperrung und Gefahrenbereich',
+      'Verkehrsabsicherung',
+      'Einsatzstelle ausleuchten',
+      'Führungsaufgabe (Einsatzleitung)',
+      'Brandwache',
+    ],
+  },
+];
+
+/** Übungsarten. Ohne Bereich passen sie zu Feuerwehr und Rettungsdienst. */
+export const UEBUNGSARTEN: { name: string; bereich?: Bereich }[] = [
+  { name: 'Atemschutzübung', bereich: 'FW' },
+  { name: 'Löschübung', bereich: 'FW' },
+  { name: 'Technische Hilfeleistung', bereich: 'FW' },
+  { name: 'Absturzsicherung und Höhenrettung', bereich: 'FW' },
+  { name: 'Gefahrgut und ABC', bereich: 'FW' },
+  { name: 'Fahrzeug- und Gerätekunde', bereich: 'FW' },
+  { name: 'Funk und Kommunikation', bereich: 'FW' },
+  { name: 'Reanimation', bereich: 'RD' },
+  { name: 'Traumaversorgung', bereich: 'RD' },
+  { name: 'Algorithmen und Medikamente', bereich: 'RD' },
+  { name: 'Medizingeräte-Einweisung', bereich: 'RD' },
+  { name: 'Einsatzübung' },
+  { name: 'Unterricht und Fortbildung' },
+  { name: 'Lehrgang' },
+  { name: 'Dienstsport' },
+];
+
+/**
  * Stand der Startlisten. Jede Version ergänzt nur, was neu ist; bereits vorhandene Einträge
  * (auch selbst angelegte) bleiben unangetastet.
  *  1 = Stichwort-Kategorien, Wachen, Fahrzeuge, Rollen, Maßnahmen und Medikamente
  *  2 = Verdachtsdiagnosen
+ *  3 = Feuerwehr-Maßnahmen und Übungsarten
  */
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
 
 type Neu = Omit<KatalogEintrag, 'id'>;
 
@@ -174,7 +253,11 @@ export function seedEintraege(ab = 0): Neu[] {
     ...MEDIKAMENTE.map((m) => massnahme(m, 'medikament')),
   ];
   const v2: Neu[] = DIAGNOSEN.map((name): Neu => ({ typ: 'diagnose', name, aktiv: true }));
-  return [...(ab < 1 ? v1 : []), ...(ab < 2 ? v2 : [])];
+  const v3: Neu[] = [
+    ...FW_MASSNAHMEN.flatMap((g) => g.namen.map((name): Neu => ({ typ: 'fwmassnahme', name, aktiv: true, gruppe: g.gruppe }))),
+    ...UEBUNGSARTEN.map((u): Neu => ({ typ: 'uebungsart', name: u.name, aktiv: true, ...(u.bereich ? { bereich: u.bereich } : {}) })),
+  ];
+  return [...(ab < 1 ? v1 : []), ...(ab < 2 ? v2 : []), ...(ab < 3 ? v3 : [])];
 }
 
 /** Legt fehlende Startlisten an – höchstens einmal je Version, auch bei doppeltem Aufruf. */

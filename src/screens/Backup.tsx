@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { backupDateiname, BackupFehler, erzeugeBackup, leseBackupText, merkeBackupZeitpunkt, stelleWiederHer, type BackupDatei } from '../db/backup';
-import { csvDateiname, erzeugeDiensteCsv, erzeugeEinsaetzeCsv } from '../db/csv';
+import { csvDateiname, erzeugeDiensteCsv, erzeugeEinsaetzeCsv, erzeugeUebungenCsv } from '../db/csv';
 import { loescheAlleDaten } from '../db/speichern';
 import { fmtDatumZeit, fmtZahl } from '../domain/time';
 import { navigate } from '../router';
@@ -44,7 +44,7 @@ function vorAlterText(letztes: number | undefined, jetzt: number): string {
 }
 
 export function Backup() {
-  const { dienste, einsaetze, katalog, katalogMap, einst } = useDaten();
+  const { dienste, einsaetze, uebungen, katalog, katalogMap, einst } = useDaten();
   const toast = useToast();
   const [geschuetzt, setGeschuetzt] = useState<boolean | null>(null);
   const [fehler, setFehler] = useState<string | undefined>();
@@ -82,11 +82,13 @@ export function Backup() {
     setArbeitet(false);
   };
 
-  const exportiere = async (art: 'einsaetze' | 'dienste') => {
+  const exportiere = async (art: 'einsaetze' | 'dienste' | 'uebungen') => {
     const text =
       art === 'einsaetze'
         ? erzeugeEinsaetzeCsv(dienste, einsaetze, katalogMap)
-        : erzeugeDiensteCsv(dienste, einsaetze, katalogMap, einst.wachzeitMitDienstRand);
+        : art === 'uebungen'
+          ? erzeugeUebungenCsv(dienste, uebungen, katalogMap)
+          : erzeugeDiensteCsv(dienste, einsaetze, katalogMap, einst.wachzeitMitDienstRand, uebungen);
     const name = csvDateiname(art, Date.now());
     if (teilenMoeglich() && (await teileDatei(text, name, 'text/csv').catch(() => false))) return;
     ladeHerunter(text, name, 'text/csv;charset=utf-8');
@@ -109,7 +111,7 @@ export function Backup() {
     try {
       const r = await stelleWiederHer(vorschau);
       setVorschau(null);
-      toast.zeige(`${fmtZahl(r.dienste)} Dienste und ${fmtZahl(r.einsaetze)} Einsätze eingespielt`);
+      toast.zeige(`${fmtZahl(r.dienste)} Dienste, ${fmtZahl(r.einsaetze)} Einsätze und ${fmtZahl(r.uebungen)} Übungen eingespielt`);
       navigate('/', true);
     } catch {
       setFehler('Das Einspielen hat nicht geklappt. Deine bisherigen Daten sind unverändert.');
@@ -118,7 +120,7 @@ export function Backup() {
     setArbeitet(false);
   };
 
-  const alsLeer = dienste.length === 0 && einsaetze.length === 0;
+  const alsLeer = dienste.length === 0 && einsaetze.length === 0 && uebungen.length === 0;
 
   return (
     <Seite titel="Sicherung" zurueckZu="/mehr">
@@ -169,6 +171,9 @@ export function Backup() {
           <Knopf voll onClick={() => void exportiere('einsaetze')} disabled={einsaetze.length === 0}>
             Einsätze als CSV
           </Knopf>
+          <Knopf voll onClick={() => void exportiere('uebungen')} disabled={uebungen.length === 0}>
+            Übungen als CSV
+          </Knopf>
           <Knopf voll onClick={() => void exportiere('dienste')} disabled={dienste.length === 0}>
             Dienste mit Über-/Minusstunden als CSV
           </Knopf>
@@ -184,6 +189,10 @@ export function Backup() {
           <div>
             <dt>Einsätze</dt>
             <dd className="zahl">{fmtZahl(einsaetze.length)}</dd>
+          </div>
+          <div>
+            <dt>Übungen</dt>
+            <dd className="zahl">{fmtZahl(uebungen.length)}</dd>
           </div>
           <div>
             <dt>Listeneinträge</dt>
@@ -202,7 +211,7 @@ export function Backup() {
       </Abschnitt>
 
       <Abschnitt titel="Alles löschen">
-        <p className="hinweis">Entfernt alle Dienste, Einsätze und eigenen Listeneinträge von diesem Handy. Die Startlisten kommen zurück.</p>
+        <p className="hinweis">Entfernt alle Dienste, Einsätze, Übungen und eigenen Listeneinträge von diesem Handy. Die Startlisten kommen zurück.</p>
         <Knopf variante="gefahr" voll onClick={() => { setTippe(''); setLoeschen(true); }} disabled={alsLeer && katalog.length === 0}>
           Alle Daten löschen …
         </Knopf>
@@ -221,10 +230,10 @@ export function Backup() {
             <>
               <p>
                 Sicherung vom <strong>{fmtDatumZeit(vorschau.exportiertAm)}</strong>: {fmtZahl(vorschau.daten.dienste.length)} Dienste,{' '}
-                {fmtZahl(vorschau.daten.einsaetze.length)} Einsätze, {fmtZahl(vorschau.daten.katalog.length)} Listeneinträge.
+                {fmtZahl(vorschau.daten.einsaetze.length)} Einsätze, {fmtZahl(vorschau.daten.uebungen.length)} Übungen, {fmtZahl(vorschau.daten.katalog.length)} Listeneinträge.
               </p>
               <p>
-                Auf diesem Handy sind jetzt {fmtZahl(dienste.length)} Dienste und {fmtZahl(einsaetze.length)} Einsätze. <strong>Sie werden ersetzt.</strong>
+                Auf diesem Handy sind jetzt {fmtZahl(dienste.length)} Dienste, {fmtZahl(einsaetze.length)} Einsätze und {fmtZahl(uebungen.length)} Übungen. <strong>Sie werden ersetzt.</strong>
               </p>
             </>
           )

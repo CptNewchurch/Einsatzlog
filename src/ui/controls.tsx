@@ -2,7 +2,8 @@ import { useId, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { maskUhrzeit, normalisiereUhrzeit } from '../domain/time';
 import { Icon } from './icons';
 
-export type Ton = 'rd' | 'fw' | 'neutral';
+/** Farbe nach Bereich: Rettungsdienst, Feuerwehr, Übung. */
+export type Ton = 'rd' | 'fw' | 'ue' | 'neutral';
 
 /* ---------- Knöpfe ---------- */
 

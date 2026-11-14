@@ -166,8 +166,10 @@ export function Saeulen({ daten, achse, lang }: SaeulenProps) {
 export interface BalkenZeile {
   label: string;
   wert: number;
-  ton: 'rd' | 'fw' | 'neutral';
+  ton: 'rd' | 'fw' | 'ue' | 'neutral';
   zusatz?: string;
+  /** Anzeige statt der gerundeten Zahl, z. B. „4,5 h“. Die Länge des Balkens folgt weiter `wert`. */
+  text?: string;
 }
 
 export function Balken({ zeilen }: { zeilen: BalkenZeile[] }) {
@@ -184,7 +186,7 @@ export function Balken({ zeilen }: { zeilen: BalkenZeile[] }) {
             />
           </span>
           <span className="balken__wert zahl">
-            {fmtZahl(z.wert)}
+            {z.text ?? fmtZahl(z.wert)}
             {z.zusatz && <span className="balken__zusatz"> {z.zusatz}</span>}
           </span>
         </li>
@@ -199,19 +201,23 @@ export function ZeitBalken({
   einsatzMin,
   rueckfahrtMin,
   wacheMin,
+  uebungMin = 0,
   offenMin = 0,
 }: {
   einsatzMin: number;
   rueckfahrtMin: number;
   wacheMin: number;
-  /** Dienstzeit, die keinem der drei Teile zugeordnet werden kann (z. B. Status 2 fehlt). */
+  /** Zeit, in der auf Wache geübt wurde; sie gehört nicht zur Wachzeit. */
+  uebungMin?: number;
+  /** Dienstzeit, die keinem der Teile zugeordnet werden kann (z. B. Status 2 fehlt). */
   offenMin?: number;
 }) {
-  const summe = Math.max(1, einsatzMin + rueckfahrtMin + wacheMin + offenMin);
+  const summe = Math.max(1, einsatzMin + rueckfahrtMin + wacheMin + uebungMin + offenMin);
   const teile = [
     { key: 'einsatz', label: 'Im Einsatz', min: einsatzMin },
     { key: 'rueck', label: 'Rückfahrt', min: rueckfahrtMin },
     { key: 'wache', label: 'Auf Wache', min: wacheMin },
+    ...(uebungMin > 0 ? [{ key: 'uebung', label: 'Übung', min: uebungMin }] : []),
     ...(offenMin > 0 ? [{ key: 'offen', label: 'Nicht zugeordnet', min: offenMin }] : []),
   ];
   return (

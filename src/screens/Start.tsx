@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { berechneStatistik } from '../domain/stats';
-import { fmtSaldo } from '../domain/time';
+import { berechneUebungen } from '../domain/uebungen';
+import { fmtSaldo, fmtStunden } from '../domain/time';
 import type { Dienst } from '../domain/types';
 import { navigate } from '../router';
 import { laufenderDienst, useDaten } from '../state/daten';
@@ -22,14 +23,18 @@ function backupHinweis(letztes: number | undefined, tage: number, hatDaten: bool
 
 export function Start() {
   const daten = useDaten();
-  const { dienste, einsaetze, einst } = daten;
+  const { dienste, einsaetze, uebungen, katalogMap, einst } = daten;
   const [anzahl, setAnzahl] = useState(SEITE);
   const jetzt = Date.now();
   const jahr = new Date(jetzt).getFullYear();
 
   const stat = useMemo(
-    () => berechneStatistik(dienste, einsaetze, { jahr, bereich: 'alle', dienstart: 'alle' }, einst.wachzeitMitDienstRand),
-    [dienste, einsaetze, jahr, einst.wachzeitMitDienstRand],
+    () => berechneStatistik(dienste, einsaetze, { jahr, bereich: 'alle', dienstart: 'alle' }, einst.wachzeitMitDienstRand, uebungen),
+    [dienste, einsaetze, uebungen, jahr, einst.wachzeitMitDienstRand],
+  );
+  const uebung = useMemo(
+    () => berechneUebungen(dienste, uebungen, { jahr, bereich: 'alle', dienstart: 'alle' }, katalogMap, einsaetze),
+    [dienste, uebungen, katalogMap, einsaetze, jahr],
   );
   const laufend = laufenderDienst(daten, jetzt);
   const laufendId = laufend?.id;
@@ -61,6 +66,9 @@ export function Start() {
               </Knopf>
               <Knopf voll onClick={() => navigate('/dienst/neu/zusatz')}>
                 Zusatzdienst anlegen
+              </Knopf>
+              <Knopf voll onClick={() => navigate('/dienst/neu/uebung')}>
+                Übungsdienst anlegen
               </Knopf>
             </div>
           }
@@ -96,9 +104,10 @@ export function Start() {
         <Knopf variante="primaer" voll onClick={() => navigate(laufend ? `/einsatz/neu?dienst=${laufend.id}` : '/einsatz/neu')}>
           <Icon name="plus" groesse={20} /> Einsatz erfassen
         </Knopf>
-        <div className="knopfreihe">
-          <Knopf onClick={() => navigate('/dienst/neu')}>Dienst anlegen</Knopf>
+        <div className="knopfreihe knopfreihe--dienste">
+          <Knopf onClick={() => navigate('/dienst/neu')}>Regeldienst</Knopf>
           <Knopf onClick={() => navigate('/dienst/neu/zusatz')}>Zusatzdienst</Knopf>
+          <Knopf onClick={() => navigate('/dienst/neu/uebung')}>Übungsdienst</Knopf>
         </div>
       </div>
 
@@ -107,6 +116,9 @@ export function Start() {
           <Kpi wert={stat.anzahl} label={stat.anzahl === 1 ? 'Einsatz' : 'Einsätze'} zusatz={stat.anzahl > 0 ? `RD ${stat.rd} · FW ${stat.fw}` : undefined} />
           <Kpi wert={stat.dienste} label={stat.dienste === 1 ? 'Dienst' : 'Dienste'} zusatz={stat.einsaetzeProDienst != null ? `Ø ${stat.einsaetzeProDienst.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Einsätze` : undefined} />
           <Kpi wert={<span className={saldo > 0 ? 'text-plus' : saldo < 0 ? 'text-minus' : undefined}>{fmtSaldo(saldo)}</span>} label="Über-/Minusstunden" zusatz={stat.ueberstunden.diensteMitPlus + stat.ueberstunden.diensteMitMinus > 0 ? 'Saldo' : undefined} />
+          {uebung.minuten > 0 && (
+            <Kpi ton="ue" wert={fmtStunden(uebung.minuten)} label="Übungszeit" zusatz={uebung.anzahl > 0 ? `${uebung.anzahl} ${uebung.anzahl === 1 ? 'Übung' : 'Übungen'}` : 'Übungsdienste'} />
+          )}
         </KpiRaster>
       </Abschnitt>
 

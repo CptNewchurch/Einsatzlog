@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loescheEinsatz, speichereEinsatz, verlaengereDienst } from '../db/speichern';
-import { sollText } from '../domain/dienst';
 import { kategorieNutzungFuerTyp, sortiereNachNutzung } from '../domain/katalogLogik';
-import { kraefteText, standardKraefte, stichwortText, TYP_INFO } from '../domain/stichwort';
+import { kraefteText, standardKraefte, stichwortText } from '../domain/stichwort';
 import {
   fmtDatumZeit,
   fmtDauer,
@@ -19,7 +18,7 @@ import {
   AUSGANG_INFO,
   BEWERTUNG_INFO,
   bereichVon,
-  TYPEN,
+  hatPlan,
   type AlarmBewertung,
   type Altersgruppe,
   type Ausgang,
@@ -31,15 +30,15 @@ import {
 } from '../domain/types';
 import { bewertungVorschlag, NACA_INFO } from '../domain/triage';
 import { dienstSaldo } from '../domain/zeiten';
-import { brauchtDurchfuehrung, MassnahmenBlock } from '../ui/massnahmen';
+import { brauchtDurchfuehrung, FwMassnahmenBlock, MassnahmenBlock } from '../ui/massnahmen';
 import { navigate, zurueck } from '../router';
-import { dienstTitel, einsatzTitel, katalogName, laufenderDienst, useDaten } from '../state/daten';
+import { einsatzTitel, katalogName, laufenderDienst, useDaten } from '../state/daten';
 import { Abschnitt, Aufklappen, Chip, ChipReihe, Feld, Knopf, Leer, Meldung, Segment, Stepper, TextFeld, Toggle, ZeitFeld } from '../ui/controls';
-import { datumLang } from '../ui/dienstzeile';
-import { Icon } from '../ui/icons';
+import { DienstWahl } from '../ui/dienstwahl';
+import { EinsatzartReihe } from '../ui/einsatzart';
 import { KatalogAuswahl } from '../ui/katalogwahl';
 import { ohneLeere, useKatalogListe } from '../ui/katalogListen';
-import { Bestaetigung, Sheet, useToast } from '../ui/overlays';
+import { Bestaetigung, useToast } from '../ui/overlays';
 import { Seite } from '../ui/seite';
 import { AlarmierungBewerten, AlterWahl, AusgangWahl, JaNein, NacaWahl } from './ErgebnisBloecke';
 
@@ -108,6 +107,12 @@ function neuerEntwurf(dienst: Dienst): FormState {
     atemschutz: false,
     atemschutzMin: 20,
   };
+}
+
+/** Setzt die Einsatzart samt Vorbelegung des Kräfteansatzes. */
+function mitTyp(f: FormState, typ: Typ): FormState {
+  const k = standardKraefte(typ);
+  return { ...f, typ, rtw: k?.rtw ?? 1, nef: k?.nef ?? 0 };
 }
 
 function ausEinsatz(e: Einsatz): FormState {
@@ -190,9 +195,11 @@ interface Props {
   id?: number;
   /** Vorgewählter Dienst für einen neuen Einsatz. */
   dienstId?: number;
+  /** Vorgewählte Einsatzart für einen neuen Einsatz. */
+  typ?: Typ;
 }
 
-export function EinsatzForm({ id, dienstId }: Props) {
+export function EinsatzForm({ id, dienstId, typ: typVorgabe }: Props) {
   const daten = useDaten();
   const { dienste, dienstMap, einst } = daten;
   const bestehend = id != null ? daten.einsaetze.find((e) => e.id === id) : undefined;
@@ -207,12 +214,14 @@ export function EinsatzForm({ id, dienstId }: Props) {
       (einst.letzterDienstId != null && dienstMap.has(einst.letzterDienstId) ? einst.letzterDienstId : undefined) ??
       dienste[0]?.id;
     if (entwurf) {
-      return { f: { ...entwurf, dienstId: dienstId != null && dienstMap.has(dienstId) ? dienstId : entwurf.dienstId }, entwurf: true };
+      const f = { ...entwurf, dienstId: dienstId != null && dienstMap.has(dienstId) ? dienstId : entwurf.dienstId };
+      return { f: typVorgabe && !f.typ ? mitTyp(f, typVorgabe) : f, entwurf: true };
     }
-    return { f: vorgabe != null ? neuerEntwurf(dienstMap.get(vorgabe)!) : null, entwurf: false };
+    const frisch = vorgabe != null ? neuerEntwurf(dienstMap.get(vorgabe)!) : null;
+    return { f: frisch && typVorgabe ? mitTyp(frisch, typVorgabe) : frisch, entwurf: false };
     // Nur beim Öffnen (oder nach „Verwerfen“) auswerten.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version, id, dienstId]);
+  }, [version, id, dienstId, typVorgabe]);
 
   if (id != null && !bestehend) {
     return (
@@ -231,6 +240,7 @@ export function EinsatzForm({ id, dienstId }: Props) {
             <div className="knopfstapel">
               <Knopf variante="primaer" voll onClick={() => navigate('/dienst/neu')}>Dienst anlegen</Knopf>
               <Knopf voll onClick={() => navigate('/dienst/neu/zusatz')}>Zusatzdienst anlegen</Knopf>
+              <Knopf voll onClick={() => navigate('/dienst/neu/uebung')}>Übungsdienst anlegen</Knopf>
             </div>
           }
         />
@@ -239,7 +249,7 @@ export function EinsatzForm({ id, dienstId }: Props) {
   }
   return (
     <Formular
-      key={`${version}-${id ?? 'neu'}-${dienstId ?? ''}`}
+      key={`${version}-${id ?? 'neu'}-${dienstId ?? ''}-${typVorgabe ?? ''}`}
       bestehend={bestehend}
       start={start.f}
       entwurfGeladen={start.entwurf}
@@ -283,7 +293,7 @@ interface FormProps {
 function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) {
   const daten = useDaten();
   const toast = useToast();
-  const { dienste, dienstMap, einst, einsaetze } = daten;
+  const { dienstMap, einst, einsaetze } = daten;
   const neu = !bestehend;
 
   const [f, setF] = useState<FormState>(start);
@@ -293,11 +303,10 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       return gleich ? alt : { ...alt, ...patch };
     });
   const [versucht, setVersucht] = useState(false);
-  const [dienstSheet, setDienstSheet] = useState(false);
   const [loeschen, setLoeschen] = useState(false);
   const [speichert, setSpeichert] = useState(false);
   const [ergebnisOffen, setErgebnisOffen] = useState(true);
-  const [massnahmenOffen, setMassnahmenOffen] = useState(f.massnahmen.length > 0 || (neu && f.typ != null && bereichVon(f.typ) === 'RD'));
+  const [massnahmenOffen, setMassnahmenOffen] = useState(f.massnahmen.length > 0 || (neu && f.typ != null));
   const [bewertungOffen, setBewertungOffen] = useState(f.bewertung != null || f.leitstelle.length > 0);
   const [weitereOffen, setWeitereOffen] = useState(!!(f.ort || f.notiz || f.tagIds.length));
   const [fahrzeugOffen, setFahrzeugOffen] = useState(false);
@@ -308,7 +317,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
   const dienst = dienstMap.get(f.dienstId)!;
   const typ = f.typ;
   const bereich = typ ? bereichVon(typ) : null;
-  const region = dienst.zusatzdienst ? undefined : einst.region;
+  const region = hatPlan(dienst) ? einst.region : undefined;
 
   /* Entwurf sichern (nur für neue Einsätze) */
   useEffect(() => {
@@ -356,7 +365,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
     alarm: !f.alarm ? 'Uhrzeit der Alarmierung angeben.' : !alarmP ? 'Uhrzeit wie 14:35 eingeben.' : alarmAuf == null ? `Liegt nicht im Dienst (${fmtZeit(dienst.beginn)}–${fmtZeit(dienst.ende)}). Dienst ändern oder die Zeit prüfen.` : undefined,
     status1: !f.status1 ? 'Status 1 angeben (einsatzbereit über Funk).' : !p1 ? 'Uhrzeit wie 15:10 eingeben.' : status1Ms != null && alarmAuf != null && status1Ms <= alarmAuf ? 'Status 1 muss nach der Alarmierung liegen.' : undefined,
     status2: f.status2 && !p2 ? 'Uhrzeit wie 15:25 eingeben.' : undefined,
-    typ: !typ ? 'Wähle den Typ des Einsatzes.' : undefined,
+    typ: !typ ? 'Wähle die Einsatzart.' : undefined,
     kategorie: typ && f.kategorie.length === 0 ? 'Wähle oder lege ein Stichwort an.' : undefined,
   };
   const zeigeZeit = (feld: 'alarm' | 'status1' | 'status2') => (versucht || f[feld] !== '' ? fehler[feld] : undefined);
@@ -388,6 +397,11 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
     const k = standardKraefte(t);
     const bleibt = f.kategorie.filter((id) => (daten.katalogMap.get(id)?.typen ?? []).includes(t));
     const wechselt = bereichVon(t) !== bereich;
+    // Rettungsdienst und Feuerwehr haben getrennte Maßnahmenlisten: beim Wechsel passt die bisherige nicht mehr.
+    const massnahmen = wechselt
+      ? f.massnahmen.filter((m) => (daten.katalogMap.get(m.massnahmeId)?.typ === 'fwmassnahme') === (bereichVon(t) === 'FW'))
+      : f.massnahmen;
+    const verworfen = f.massnahmen.length - massnahmen.length;
     set({
       typ: t,
       kategorie: bleibt,
@@ -396,8 +410,12 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       nef: k?.nef ?? 0,
       // Zwischen Rettungsdienst und Feuerwehr passen nur Fehleinsätze zu beiden.
       ausgang: wechselt && f.ausgang !== 'fehleinsatz' ? null : f.ausgang,
+      massnahmen,
     });
-    if (bereichVon(t) === 'RD' && wechselt) setMassnahmenOffen(true);
+    if (verworfen > 0) {
+      toast.zeige(`${verworfen === 1 ? 'Eine Maßnahme' : `${verworfen} Maßnahmen`} entfernt: Rettungsdienst und Feuerwehr haben getrennte Listen.`);
+    }
+    if (wechselt) setMassnahmenOffen(true);
   };
 
   const wechsleDienst = (neuerDienst: Dienst) => {
@@ -407,7 +425,6 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       fahrzeug: f.fahrzeug[0] === alt.fahrzeugId && neuerDienst.fahrzeugId != null ? [neuerDienst.fahrzeugId] : f.fahrzeug,
       rolle: f.rolle[0] === alt.rolleId && neuerDienst.rolleId != null ? [neuerDienst.rolleId] : f.rolle,
     });
-    setDienstSheet(false);
   };
 
   const speichern = async () => {
@@ -527,26 +544,15 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
         </Meldung>
       )}
 
-      <button type="button" className="dienstwahl" onClick={() => setDienstSheet(true)} aria-label="Dienst ändern">
-        <span className="dienstwahl__text">
-          <span className="dienstwahl__label">Dienst{dienst.zusatzdienst ? ' (Zusatzdienst)' : ''}</span>
-          <span className="dienstwahl__wert">{dienstTitel(daten, dienst)}</span>
-          <span className="dienstwahl__meta zahl">
-            {dienst.zusatzdienst ? `${fmtZeit(dienst.beginn)}–${fmtZeit(dienst.ende)}` : sollText(dienst)}
-          </span>
-        </span>
-        <span className="dienstwahl__aktion">Ändern</span>
-      </button>
+      <DienstWahl dienst={dienst} onWahl={wechsleDienst} zaehle="einsaetze" />
 
       <Abschnitt titel="Stichwort">
-        <Feld label="Typ" fehler={versucht ? fehler.typ : undefined}>
-          <ChipReihe label="Typ des Einsatzes">
-            {TYPEN.map((t) => (
-              <Chip key={t} ton={bereichVon(t) === 'RD' ? 'rd' : 'fw'} aktiv={typ === t} onClick={() => waehleTyp(t)} titel={TYP_INFO[t].lang}>
-                <strong>{t}</strong> {TYP_INFO[t].kurz}
-              </Chip>
-            ))}
-          </ChipReihe>
+        <Feld label="Einsatzart" fehler={versucht ? fehler.typ : undefined}>
+          <EinsatzartReihe
+            aktiv={typ}
+            onTyp={waehleTyp}
+            onUebung={neu ? () => navigate(`/uebung/neu?dienst=${f.dienstId}`, true) : undefined}
+          />
         </Feld>
 
         {typ ? (
@@ -624,7 +630,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
           <Meldung art="info">
             Der Einsatz reicht über das Dienstende ({fmtZeit(dienst.ende)}) hinaus. Beim Speichern wird das Dienstende auf{' '}
             <strong className="zahl">{fmtZeit(neuesDienstende)}</strong> gesetzt
-            {!dienst.zusatzdienst && (
+            {hatPlan(dienst) && (
               <>
                 {' '}
                 – <span className="zahl">{fmtSaldo(dienstSaldo({ ...dienst, ende: neuesDienstende }).saldoMin)}</span> gegenüber dem Plan
@@ -675,13 +681,22 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
 
       {bereich && (
         <Aufklappen
-          titel="Maßnahmen und Medikamente"
+          titel={bereich === 'FW' ? 'Maßnahmen auf Befehl' : 'Maßnahmen und Medikamente'}
           zusatz={f.massnahmen.length > 0 ? `${f.massnahmen.length} Maßnahme${f.massnahmen.length === 1 ? '' : 'n'}` : undefined}
           offen={massnahmenOffen}
           onToggle={() => setMassnahmenOffen((o) => !o)}
         >
-          <p className="hinweis">Nur, was du selbst durchgeführt hast.</p>
-          <MassnahmenBlock werte={f.massnahmen} onChange={(massnahmen) => set({ massnahmen })} fehlende={versucht ? fehlendeMassnahmen : undefined} region={region} />
+          {bereich === 'FW' ? (
+            <>
+              <p className="hinweis">Nur, was du selbst auf Befehl ausgeführt hast.</p>
+              <FwMassnahmenBlock werte={f.massnahmen} onChange={(massnahmen) => set({ massnahmen })} />
+            </>
+          ) : (
+            <>
+              <p className="hinweis">Nur, was du selbst durchgeführt hast.</p>
+              <MassnahmenBlock werte={f.massnahmen} onChange={(massnahmen) => set({ massnahmen })} fehlende={versucht ? fehlendeMassnahmen : undefined} region={region} />
+            </>
+          )}
         </Aufklappen>
       )}
 
@@ -775,36 +790,6 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       </Aufklappen>
 
       {versucht && hatFehler && <Meldung art="fehler">Bitte prüfe die markierten Felder.</Meldung>}
-
-      <Sheet
-        offen={dienstSheet}
-        titel="Dienst wählen"
-        onClose={() => setDienstSheet(false)}
-        fuss={
-          <div className="knopfreihe">
-            <Knopf onClick={() => navigate('/dienst/neu')}>Dienst anlegen</Knopf>
-            <Knopf onClick={() => navigate('/dienst/neu/zusatz')}>Zusatzdienst</Knopf>
-          </div>
-        }
-      >
-        <ul className="auswahl">
-          {dienste.slice(0, 20).map((d) => (
-            <li key={d.id}>
-              <button type="button" className="auswahl__zeile auswahl__zeile--dienst" aria-pressed={d.id === f.dienstId} onClick={() => wechsleDienst(d)}>
-                <span className="auswahl__haken">{d.id === f.dienstId && <Icon name="check" groesse={20} />}</span>
-                <span className="auswahl__name">
-                  <span className="auswahl__haupt">{datumLang(d.beginn)}{d.zusatzdienst ? ' · Zusatzdienst' : ''}</span>
-                  <span className="auswahl__neben zahl">
-                    {fmtZeit(d.beginn)}–{fmtZeit(d.ende)}{katalogName(daten, d.wacheId) ? ` · ${katalogName(daten, d.wacheId)}` : ''}
-                  </span>
-                </span>
-                <span className="auswahl__zahl zahl">{daten.einsaetzeNachDienst.get(d.id!)?.length ?? 0}×</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        {dienste.length > 20 && <p className="hinweis">Es werden die 20 neuesten Dienste gezeigt. Ältere Einsätze änderst du über den jeweiligen Dienst.</p>}
-      </Sheet>
 
       <Bestaetigung
         offen={loeschen}

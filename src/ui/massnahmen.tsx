@@ -4,7 +4,11 @@ import { empfehlung, LEVEL_NAME } from '../domain/kompendium';
 import { nameKey, normName, nutzung, sortiereNachNutzung } from '../domain/katalogLogik';
 import {
   DURCHFUEHRUNG_INFO,
+  FW_GRUPPEN,
+  FW_GRUPPE_KURZ,
+  FW_GRUPPE_NAME,
   type Durchfuehrung,
+  type FwGruppe,
   type KatalogEintrag,
   type MassnahmeArt,
   type MassnahmeEintrag,
@@ -252,6 +256,184 @@ function MassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
             </ul>
           </div>
         ))}
+    </Sheet>
+  );
+}
+
+/* ---------- Feuerwehr: Maßnahmen auf Befehl ---------- */
+
+interface FwBlockProps {
+  werte: MassnahmeEintrag[];
+  onChange: (w: MassnahmeEintrag[]) => void;
+}
+
+/**
+ * Maßnahmen im Feuerwehreinsatz. Sie werden auf Befehl ausgeführt und brauchen deshalb keine
+ * Rechtsgrundlage; gewählt wird aus der Feuerwehr-Liste, gegliedert nach Gruppen.
+ */
+export function FwMassnahmenBlock({ werte, onChange }: FwBlockProps) {
+  const { katalogMap } = useDaten();
+  const [offen, setOffen] = useState(false);
+
+  const setze = (i: number, patch: Partial<MassnahmeEintrag>) =>
+    onChange(werte.map((w, j) => (j === i ? { ...w, ...patch } : w)));
+
+  return (
+    <div className="massnahmen">
+      {werte.length === 0 && (
+        <p className="hinweis">Noch keine Maßnahme erfasst. Trage ein, was du auf Befehl ausgeführt hast, zum Beispiel Löschangriff oder Türöffnung.</p>
+      )}
+      {werte.map((w, i) => {
+        const k = katalogMap.get(w.massnahmeId);
+        // Einsätze aus der ersten Version können noch Maßnahmen des Rettungsdienstes enthalten.
+        const feuerwehr = k?.typ === 'fwmassnahme';
+        const untertitel = feuerwehr
+          ? FW_GRUPPE_NAME[k.gruppe ?? 'sonstige']
+          : `Rettungsdienst${w.durchfuehrung ? ` · ${DURCHFUEHRUNG_INFO[w.durchfuehrung].kurz}` : ''}`;
+        return (
+          <div className="massnahme massnahme--kompakt" key={i}>
+            <div className="massnahme__kopf">
+              <div>
+                <div className="massnahme__name">{k?.name ?? '?'}</div>
+                <div className="massnahme__art">{untertitel}</div>
+              </div>
+              <button
+                type="button"
+                className="icon-knopf"
+                aria-label={`${k?.name ?? 'Maßnahme'} entfernen`}
+                onClick={() => onChange(werte.filter((_, j) => j !== i))}
+              >
+                <Icon name="papierkorb" />
+              </button>
+            </div>
+            <div className="massnahme__zahl">
+              <span className="feld__label">Anzahl</span>
+              <Stepper label={`Anzahl ${k?.name ?? ''}`} wert={w.anzahl} min={1} max={20} onChange={(n) => setze(i, { anzahl: n })} />
+            </div>
+          </div>
+        );
+      })}
+      <Knopf variante="sekundaer" voll onClick={() => setOffen(true)}>
+        <Icon name="plus" groesse={20} /> Maßnahme
+      </Knopf>
+      <FwMassnahmeSheet
+        offen={offen}
+        onClose={() => setOffen(false)}
+        werte={werte}
+        onHinzu={(k) => onChange([...werte, { massnahmeId: k.id!, anzahl: 1, durchfuehrung: 'befehl' }])}
+      />
+    </div>
+  );
+}
+
+function FwMassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
+  const { katalog, dienste, einsaetze } = useDaten();
+  const toast = useToast();
+  const [suche, setSuche] = useState('');
+  const [neueGruppe, setNeueGruppe] = useState<FwGruppe>('sonstige');
+
+  const gezaehlt = useMemo(() => nutzung('fwmassnahme', dienste, einsaetze), [dienste, einsaetze]);
+  const aktive = useMemo(
+    () => sortiereNachNutzung(katalog.filter((k) => k.typ === 'fwmassnahme' && k.aktiv), gezaehlt),
+    [katalog, gezaehlt],
+  );
+
+  const key = nameKey(suche);
+  const treffer = key ? aktive.filter((k) => nameKey(k.name).includes(key)) : aktive;
+  const neuName = normName(suche);
+  const exakt = aktive.some((k) => nameKey(k.name) === nameKey(neuName));
+
+  const gruppen: { titel: string; liste: KatalogEintrag[] }[] = key
+    ? [{ titel: 'Treffer', liste: treffer }]
+    : [
+        { titel: 'Häufig verwendet', liste: treffer.filter((k) => (gezaehlt.get(k.id!) ?? 0) > 0).slice(0, 6) },
+        ...FW_GRUPPEN.map((g) => ({
+          titel: FW_GRUPPE_NAME[g],
+          liste: treffer.filter((k) => (k.gruppe ?? 'sonstige') === g),
+        })),
+      ];
+
+  const anzahlIn = (id: number) => werte.filter((w) => w.massnahmeId === id).length;
+
+  const legeAn = async () => {
+    try {
+      const k = await legeKatalogEintragAn('fwmassnahme', neuName, { gruppe: neueGruppe });
+      onHinzu(k);
+      setSuche('');
+    } catch (err) {
+      toast.zeige(err instanceof Error ? err.message : 'Das hat nicht geklappt.');
+    }
+  };
+
+  const schliesse = () => {
+    setSuche('');
+    onClose();
+  };
+
+  return (
+    <Sheet
+      offen={offen}
+      titel="Maßnahme auf Befehl"
+      onClose={schliesse}
+      fuss={
+        <Knopf variante="primaer" voll onClick={schliesse}>
+          Fertig{werte.length > 0 ? ` (${werte.length})` : ''}
+        </Knopf>
+      }
+    >
+      <div className="suchfeld">
+        <Icon name="suche" groesse={20} />
+        <input
+          className="eingabe"
+          value={suche}
+          onChange={(e) => setSuche(e.target.value)}
+          placeholder="Suchen oder neu anlegen"
+          aria-label="Maßnahme suchen oder neu anlegen"
+          maxLength={60}
+        />
+      </div>
+      <p className="hinweis">Tippe mehrfach, um dieselbe Maßnahme erneut hinzuzufügen. Was fehlt, legst du oben neu an.</p>
+
+      {neuName && !exakt && (
+        <div className="neu-massnahme">
+          <ChipReihe label="Gruppe der neuen Maßnahme">
+            {FW_GRUPPEN.map((g) => (
+              <Chip key={g} klein ton="fw" aktiv={neueGruppe === g} onClick={() => setNeueGruppe(g)}>
+                {FW_GRUPPE_KURZ[g]}
+              </Chip>
+            ))}
+          </ChipReihe>
+          <button type="button" className="auswahl__zeile auswahl__zeile--neu" onClick={() => void legeAn()}>
+            <Icon name="plus" groesse={20} />
+            <span>„{neuName}“ neu anlegen und hinzufügen</span>
+          </button>
+        </div>
+      )}
+
+      {gruppen
+        .filter((g) => g.liste.length > 0)
+        .map((g) => (
+          <div key={g.titel}>
+            <h3 className="auswahl__gruppe">{g.titel}</h3>
+            <ul className="auswahl">
+              {g.liste.map((k) => {
+                const n = anzahlIn(k.id!);
+                return (
+                  <li key={k.id}>
+                    <button type="button" className="auswahl__zeile" onClick={() => onHinzu(k)}>
+                      <span className="auswahl__haken">
+                        <Icon name="plus" groesse={18} />
+                      </span>
+                      <span className="auswahl__name">{k.name}</span>
+                      {n > 0 && <span className="auswahl__badge zahl">{n}× im Einsatz</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      {treffer.length === 0 && !neuName && <p className="hinweis">Keine Maßnahmen in der Liste.</p>}
     </Sheet>
   );
 }

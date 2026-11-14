@@ -1,46 +1,57 @@
 import { db } from './db';
 import { sorgeFuerStartlisten } from './seed';
 import { speichereEinstellungen } from './einstellungen';
-import type { Dienst, Einsatz } from '../domain/types';
+import { hatPlan, type Dienst, type Einsatz, type Uebung } from '../domain/types';
 
 export async function speichereDienst(eingabe: Dienst): Promise<number> {
-  // Ein Zusatzdienst hat keinen Plan: Soll = Ist, und er prägt keine Vorbelegung für Regeldienste.
-  const dienst: Dienst = eingabe.zusatzdienst
-    ? { ...eingabe, sollBeginn: eingabe.beginn, sollEnde: eingabe.ende }
-    : eingabe;
+  // Zusatz- und Übungsdienste haben keinen Plan: Soll = Ist, und sie prägen keine Vorbelegung für Regeldienste.
+  const dienst: Dienst = hatPlan(eingabe)
+    ? eingabe
+    : { ...eingabe, sollBeginn: eingabe.beginn, sollEnde: eingabe.ende };
   const id = await db.dienste.put(dienst);
   await speichereEinstellungen({
     letzterDienstId: id,
-    ...(dienst.zusatzdienst
-      ? {}
-      : {
+    ...(hatPlan(dienst)
+      ? {
           ...(dienst.wacheId != null ? { standardWacheId: dienst.wacheId } : {}),
           ...(dienst.fahrzeugId != null ? { standardFahrzeugId: dienst.fahrzeugId } : {}),
           ...(dienst.rolleId != null ? { standardRolleId: dienst.rolleId } : {}),
-        }),
+        }
+      : {}),
   });
   return id;
 }
 
 /**
  * Setzt das Dienstende später, z. B. weil ein Einsatz über das geplante Ende hinausging.
- * Beim Regeldienst bleibt der Plan stehen (daraus ergeben sich die Überstunden), beim Zusatzdienst gilt Soll = Ist.
+ * Beim Regeldienst bleibt der Plan stehen (daraus ergeben sich die Überstunden), bei Zusatz- und Übungsdiensten gilt Soll = Ist.
  */
 export async function verlaengereDienst(id: number, ende: number): Promise<void> {
   await db.transaction('rw', db.dienste, async () => {
     const d = await db.dienste.get(id);
     if (!d || ende <= d.ende) return;
-    await db.dienste.update(id, d.zusatzdienst ? { ende, sollEnde: ende } : { ende });
+    await db.dienste.update(id, hatPlan(d) ? { ende } : { ende, sollEnde: ende });
   });
 }
 
-/** Löscht einen Dienst samt aller seiner Einsätze. */
+/** Löscht einen Dienst samt aller seiner Einsätze und Übungen. Liefert die Zahl der gelöschten Einsätze. */
 export async function loescheDienst(id: number): Promise<number> {
-  return db.transaction('rw', db.dienste, db.einsaetze, async () => {
+  return db.transaction('rw', db.dienste, db.einsaetze, db.uebungen, async () => {
     const anzahl = await db.einsaetze.where('dienstId').equals(id).delete();
+    await db.uebungen.where('dienstId').equals(id).delete();
     await db.dienste.delete(id);
     return anzahl;
   });
+}
+
+export async function speichereUebung(uebung: Uebung): Promise<number> {
+  const id = await db.uebungen.put(uebung);
+  await speichereEinstellungen({ letzterDienstId: uebung.dienstId });
+  return id;
+}
+
+export async function loescheUebung(id: number): Promise<void> {
+  await db.uebungen.delete(id);
 }
 
 export async function speichereEinsatz(einsatz: Einsatz): Promise<number> {
@@ -61,10 +72,10 @@ export async function loescheEinsatz(id: number): Promise<void> {
   await db.einsaetze.delete(id);
 }
 
-/** Entfernt alle Einsatzdaten und stellt die Startlisten wieder her. */
+/** Entfernt alle Dienste, Einsätze und Übungen und stellt die Startlisten wieder her. */
 export async function loescheAlleDaten(): Promise<void> {
-  await db.transaction('rw', db.dienste, db.einsaetze, db.katalog, db.meta, async () => {
-    await Promise.all([db.dienste.clear(), db.einsaetze.clear(), db.katalog.clear(), db.meta.clear()]);
+  await db.transaction('rw', db.dienste, db.einsaetze, db.uebungen, db.katalog, db.meta, async () => {
+    await Promise.all([db.dienste.clear(), db.einsaetze.clear(), db.uebungen.clear(), db.katalog.clear(), db.meta.clear()]);
   });
   await sorgeFuerStartlisten();
 }

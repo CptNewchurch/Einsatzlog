@@ -3,7 +3,18 @@ import { aendereKatalogEintrag, legeKatalogEintragAn, loescheKatalogEintrag } fr
 import { KATALOG_INFO, KATALOG_REIHENFOLGE } from '../domain/katalogInfo';
 import { nameKey, normName, nutzung } from '../domain/katalogLogik';
 import { BEREICH_NAME } from '../domain/stichwort';
-import { TYPEN, type Bereich, type KatalogEintrag, type KatalogTyp, type MassnahmeArt, type Typ } from '../domain/types';
+import {
+  FW_GRUPPEN,
+  FW_GRUPPE_KURZ,
+  FW_GRUPPE_NAME,
+  TYPEN,
+  type Bereich,
+  type FwGruppe,
+  type KatalogEintrag,
+  type KatalogTyp,
+  type MassnahmeArt,
+  type Typ,
+} from '../domain/types';
 import { katalogPfad, navigate } from '../router';
 import { useDaten } from '../state/daten';
 import { Chip, ChipReihe, Feld, Knopf, Leer, Meldung, Segment, TextFeld, Toggle } from '../ui/controls';
@@ -59,9 +70,12 @@ function meta(k: KatalogEintrag): string {
       return (k.typen ?? []).length > 0 ? [...(k.typen ?? [])].sort((a, b) => TYPEN.indexOf(a) - TYPEN.indexOf(b)).join(' · ') : 'ohne Typ';
     case 'fahrzeug':
     case 'rolle':
+    case 'uebungsart':
       return k.bereich ? BEREICH_NAME[k.bereich] : 'RD und FW';
     case 'massnahme':
       return `${ART_NAME[k.art ?? 'sonstige']}${k.kompendiumKey ? ' · Kompendium' : ''}`;
+    case 'fwmassnahme':
+      return FW_GRUPPE_NAME[k.gruppe ?? 'sonstige'];
     default:
       return '';
   }
@@ -72,6 +86,7 @@ interface Entwurf {
   typen: Typ[];
   bereich: Bereich | 'beide';
   art: MassnahmeArt;
+  gruppe: FwGruppe;
   aktiv: boolean;
 }
 
@@ -81,6 +96,7 @@ function entwurfVon(k?: KatalogEintrag): Entwurf {
     typen: k?.typen ?? [],
     bereich: k?.bereich ?? 'beide',
     art: k?.art ?? 'sonstige',
+    gruppe: k?.gruppe ?? 'sonstige',
     aktiv: k?.aktiv ?? true,
   };
 }
@@ -108,8 +124,9 @@ function KatalogBearbeiten({ typ, eintrag, verwendet, onClose }: BearbeitenProps
 
   const felder = (): Partial<KatalogEintrag> => ({
     ...(typ === 'kategorie' ? { typen: e.typen } : {}),
-    ...(typ === 'fahrzeug' || typ === 'rolle' ? { bereich: e.bereich === 'beide' ? undefined : e.bereich } : {}),
+    ...(typ === 'fahrzeug' || typ === 'rolle' || typ === 'uebungsart' ? { bereich: e.bereich === 'beide' ? undefined : e.bereich } : {}),
     ...(typ === 'massnahme' && !artFest ? { art: e.art } : {}),
+    ...(typ === 'fwmassnahme' ? { gruppe: e.gruppe } : {}),
   });
 
   const speichern = async () => {
@@ -175,9 +192,20 @@ function KatalogBearbeiten({ typ, eintrag, verwendet, onClose }: BearbeitenProps
             </ChipReihe>
           </Feld>
         )}
-        {(typ === 'fahrzeug' || typ === 'rolle') && (
+        {(typ === 'fahrzeug' || typ === 'rolle' || typ === 'uebungsart') && (
           <Feld label="Vorschlagen bei">
             <Segment<Bereich | 'beide'> label="Bereich" wert={e.bereich} onChange={(bereich) => setE({ ...e, bereich })} optionen={BEREICH_OPTIONEN} />
+          </Feld>
+        )}
+        {typ === 'fwmassnahme' && (
+          <Feld label="Gruppe" hinweis="Danach gliedern sich die Auswahl und die Auswertung.">
+            <ChipReihe label="Gruppe">
+              {FW_GRUPPEN.map((g) => (
+                <Chip key={g} klein ton="fw" aktiv={e.gruppe === g} onClick={() => setE({ ...e, gruppe: g })}>
+                  {FW_GRUPPE_KURZ[g]}
+                </Chip>
+              ))}
+            </ChipReihe>
           </Feld>
         )}
         {typ === 'massnahme' && (
@@ -237,12 +265,12 @@ function KatalogBearbeiten({ typ, eintrag, verwendet, onClose }: BearbeitenProps
 }
 
 export function KatalogListeScreen({ typ }: { typ: KatalogTyp }) {
-  const { katalog, dienste, einsaetze } = useDaten();
+  const { katalog, dienste, einsaetze, uebungen } = useDaten();
   const info = KATALOG_INFO[typ];
   const [suche, setSuche] = useState('');
   const [bearbeite, setBearbeite] = useState<KatalogEintrag | 'neu' | null>(null);
 
-  const zaehler = useMemo(() => nutzung(typ, dienste, einsaetze), [typ, dienste, einsaetze]);
+  const zaehler = useMemo(() => nutzung(typ, dienste, einsaetze, uebungen), [typ, dienste, einsaetze, uebungen]);
   const alle = useMemo(
     () => katalog.filter((k) => k.typ === typ).sort((a, b) => a.name.localeCompare(b.name, 'de')),
     [katalog, typ],
@@ -259,7 +287,9 @@ export function KatalogListeScreen({ typ }: { typ: KatalogTyp }) {
       ? (['medikament', 'invasiv', 'sonstige'] as const)
           .map((art) => ({ titel: gruppenTitel(art), liste: aktive.filter((k) => (k.art ?? 'sonstige') === art) }))
           .filter((g) => g.liste.length > 0)
-      : [{ liste: aktive }];
+      : typ === 'fwmassnahme'
+        ? FW_GRUPPEN.map((g) => ({ titel: FW_GRUPPE_NAME[g], liste: aktive.filter((k) => (k.gruppe ?? 'sonstige') === g) })).filter((g) => g.liste.length > 0)
+        : [{ liste: aktive }];
 
   const zeile = (k: KatalogEintrag) => {
     const n = zaehler.get(k.id!) ?? 0;

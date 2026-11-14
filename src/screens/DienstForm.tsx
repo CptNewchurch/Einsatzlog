@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { loescheDienst, speichereDienst } from '../db/speichern';
+import { loescheDienst, speichereDienst, speichereUebung } from '../db/speichern';
 import { berechneDienstEingabe, dienstArt, sollDauerStunden, sollText, type DienstArt } from '../domain/dienst';
 import {
   datumInput,
@@ -31,6 +31,8 @@ interface Props {
   zeitenOffen?: boolean;
   /** Neuer Zusatzdienst (bei bestehendem Dienst gilt dessen Art). */
   zusatz?: boolean;
+  /** Neuer reiner Übungsdienst (bei bestehendem Dienst gilt dessen Art). */
+  uebung?: boolean;
 }
 
 /** Vor 12 Uhr ist meist der Dienst von gestern gemeint, der gerade zu Ende ging. */
@@ -38,7 +40,7 @@ function vorschlagDatum(jetzt: Date): string {
   return datumVorTagen(jetzt.getTime(), jetzt.getHours() < 12 ? 1 : 0);
 }
 
-export function DienstForm({ id, zusatz: zusatzNeu, zeitenOffen }: Props) {
+export function DienstForm({ id, zusatz: zusatzNeu, uebung: uebungNeu, zeitenOffen }: Props) {
   const daten = useDaten();
   const { dienstMap, einst } = daten;
   const bestehend = id != null ? dienstMap.get(id) : undefined;
@@ -51,9 +53,10 @@ export function DienstForm({ id, zusatz: zusatzNeu, zeitenOffen }: Props) {
   }
   return (
     <Formular
-      key={id ?? (zusatzNeu ? 'zusatz' : 'neu')}
+      key={id ?? (uebungNeu ? 'uebung' : zusatzNeu ? 'zusatz' : 'neu')}
       bestehend={bestehend}
       zusatz={bestehend ? !!bestehend.zusatzdienst : !!zusatzNeu}
+      uebungsdienst={bestehend ? !!bestehend.uebungsdienst : !!uebungNeu}
       regelBeginn={einst.regelBeginn}
       zeitenOffen={!!zeitenOffen}
     />
@@ -63,33 +66,38 @@ export function DienstForm({ id, zusatz: zusatzNeu, zeitenOffen }: Props) {
 interface FormProps {
   bestehend?: Dienst;
   zusatz: boolean;
+  uebungsdienst: boolean;
   regelBeginn: string;
   zeitenOffen: boolean;
 }
 
-function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
+function Formular({ bestehend, zusatz, uebungsdienst, regelBeginn, zeitenOffen }: FormProps) {
   const daten = useDaten();
   const toast = useToast();
   const { einst } = daten;
   const neu = !bestehend;
+  /** Zusatz- und Übungsdienste haben keinen Plan: freie Zeiten, nichts vorbelegt, keine Über- und Minusstunden. */
+  const frei = zusatz || uebungsdienst;
+  const dienstName = uebungsdienst ? 'Übungsdienst' : zusatz ? 'Zusatzdienst' : 'Dienst';
 
-  const wachen = useKatalogListe(zusatz ? 'standort' : 'wache');
+  const wachen = useKatalogListe(frei ? 'standort' : 'wache');
   const fahrzeuge = useKatalogListe('fahrzeug');
   const rollen = useKatalogListe('rolle');
+  const arten = useKatalogListe('uebungsart');
 
   /* ---- Anfangswerte ---- */
   const start = useMemo(() => {
     const jetzt = new Date();
     if (bestehend) {
-      const art: DienstArt = zusatz ? 'andere' : dienstArt(bestehend, regelBeginn);
+      const art: DienstArt = frei ? 'andere' : dienstArt(bestehend, regelBeginn);
       return {
-        datum: datumInput(zusatz ? bestehend.beginn : bestehend.sollBeginn),
+        datum: datumInput(frei ? bestehend.beginn : bestehend.sollBeginn),
         art,
-        beginnUhr: fmtZeit(zusatz ? bestehend.beginn : bestehend.sollBeginn),
+        beginnUhr: fmtZeit(frei ? bestehend.beginn : bestehend.sollBeginn),
         dauer: sollDauerStunden(bestehend) ?? 12,
-        endeUhr: zusatz ? fmtZeit(bestehend.ende) : '',
-        istBeginn: !zusatz && bestehend.beginn !== bestehend.sollBeginn ? fmtZeit(bestehend.beginn) : '',
-        istEnde: !zusatz && bestehend.ende !== bestehend.sollEnde ? fmtZeit(bestehend.ende) : '',
+        endeUhr: frei ? fmtZeit(bestehend.ende) : '',
+        istBeginn: !frei && bestehend.beginn !== bestehend.sollBeginn ? fmtZeit(bestehend.beginn) : '',
+        istEnde: !frei && bestehend.ende !== bestehend.sollEnde ? fmtZeit(bestehend.ende) : '',
         wache: bestehend.wacheId != null ? [bestehend.wacheId] : [],
         fahrzeug: bestehend.fahrzeugId != null ? [bestehend.fahrzeugId] : [],
         rolle: bestehend.rolleId != null ? [bestehend.rolleId] : [],
@@ -97,18 +105,18 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
       };
     }
     // Neuer Regeldienst: üblicher Dienst, Wache/Fahrzeug/Rolle vom letzten Mal.
-    // Neuer Zusatzdienst: bewusst nichts vorbelegt.
+    // Neuer Zusatz- oder Übungsdienst: bewusst nichts vorbelegt.
     return {
-      datum: zusatz ? datumInput(jetzt.getTime()) : vorschlagDatum(jetzt),
-      art: (zusatz ? 'andere' : '24') as DienstArt,
-      beginnUhr: zusatz ? '' : regelBeginn,
+      datum: frei ? datumInput(jetzt.getTime()) : vorschlagDatum(jetzt),
+      art: (frei ? 'andere' : '24') as DienstArt,
+      beginnUhr: frei ? '' : regelBeginn,
       dauer: 24,
       endeUhr: '',
       istBeginn: '',
       istEnde: '',
-      wache: zusatz || einst.standardWacheId == null ? [] : [einst.standardWacheId],
-      fahrzeug: zusatz || einst.standardFahrzeugId == null ? [] : [einst.standardFahrzeugId],
-      rolle: zusatz || einst.standardRolleId == null ? [] : [einst.standardRolleId],
+      wache: frei || einst.standardWacheId == null ? [] : [einst.standardWacheId],
+      fahrzeug: frei || einst.standardFahrzeugId == null ? [] : [einst.standardFahrzeugId],
+      rolle: frei || einst.standardRolleId == null ? [] : [einst.standardRolleId],
       notiz: '',
     };
     // Nur beim Öffnen auswerten.
@@ -128,6 +136,9 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
   const [fahrzeug, setFahrzeug] = useState<number[]>(start.fahrzeug);
   const [rolle, setRolle] = useState<number[]>(start.rolle);
   const [notiz, setNotiz] = useState(start.notiz);
+  /** Nur beim Anlegen eines Übungsdienstes: Art und Thema der ersten Übung, die den ganzen Dienst füllt. */
+  const [uebungArt, setUebungArt] = useState<number[]>([]);
+  const [uebungThema, setUebungThema] = useState('');
   const [versucht, setVersucht] = useState(false);
   const [loeschen, setLoeschen] = useState(false);
   const [speichert, setSpeichert] = useState(false);
@@ -157,17 +168,20 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
     return { beginn, ende, beginnFehler: !s, endeFehler: !e };
   }, [datum, beginnUhr, endeUhr]);
 
-  const zeiten = zusatz
+  const zeiten = frei
     ? zusatzZeiten.beginn != null && zusatzZeiten.ende != null
       ? { sollBeginn: zusatzZeiten.beginn, sollEnde: zusatzZeiten.ende, beginn: zusatzZeiten.beginn, ende: zusatzZeiten.ende }
       : null
     : regelErgebnis.zeiten;
 
-  const saldo = zeiten && !zusatz ? dienstSaldo(zeiten) : null;
+  const saldo = zeiten && !frei ? dienstSaldo(zeiten) : null;
 
   /* ---- Prüfungen ---- */
   const einsaetze = bestehend ? (daten.einsaetzeNachDienst.get(bestehend.id!) ?? []) : [];
+  const uebungen = bestehend ? (daten.uebungenNachDienst.get(bestehend.id!) ?? []) : [];
   const ausserhalb = zeiten ? einsaetze.filter((e) => e.alarm < zeiten.beginn || e.alarm >= zeiten.ende) : [];
+  const uebungenAusserhalb = zeiten ? uebungen.filter((u) => u.beginn < zeiten.beginn || u.beginn >= zeiten.ende) : [];
+  const uebungenZuSpaet = zeiten ? uebungen.filter((u) => u.ende > zeiten.ende && !uebungenAusserhalb.includes(u)) : [];
   const zuSpaet = zeiten
     ? einsaetze.filter((e) => Math.max(e.status1, e.status2 ?? 0) > zeiten.ende && !ausserhalb.includes(e))
     : [];
@@ -176,7 +190,7 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
     : undefined;
 
   const fehler: Partial<Record<'datum' | 'beginnUhr' | 'endeUhr' | 'dauer' | 'istBeginn' | 'istEnde', string>> = {};
-  if (zusatz) {
+  if (frei) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) fehler.datum = 'Datum angeben.';
     if (zusatzZeiten.beginnFehler) fehler.beginnUhr = beginnUhr ? 'Uhrzeit wie 18:00 eingeben.' : 'Beginn angeben.';
     if (zusatzZeiten.endeFehler) fehler.endeUhr = endeUhr ? 'Uhrzeit wie 02:00 eingeben.' : 'Ende angeben.';
@@ -213,7 +227,7 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
   const speichern = async () => {
     setVersucht(true);
     if (!zeiten || Object.keys(fehler).length > 0) return;
-    if (ausserhalb.length > 0) return;
+    if (ausserhalb.length > 0 || uebungenAusserhalb.length > 0) return;
     setSpeichert(true);
     try {
       const dienst: Dienst = ohneLeere({
@@ -226,10 +240,17 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
         fahrzeugId: fahrzeug[0],
         rolleId: rolle[0],
         zusatzdienst: zusatz ? true : undefined,
+        uebungsdienst: uebungsdienst ? true : undefined,
         notiz: notiz.trim() || undefined,
       });
       const neueId = await speichereDienst(dienst);
-      toast.zeige(neu ? (zusatz ? 'Zusatzdienst angelegt' : 'Dienst angelegt') : 'Dienst gespeichert');
+      // Die gewählte Übungsart wird zur ersten Übung, die den ganzen Dienst füllt; weitere lassen sich im Dienst ergänzen.
+      if (uebungsdienst && neu && uebungArt[0] != null) {
+        await speichereUebung(
+          ohneLeere({ dienstId: neueId, beginn: zeiten.beginn, ende: zeiten.ende, artId: uebungArt[0], thema: uebungThema.trim() || undefined }),
+        );
+      }
+      toast.zeige(neu ? `${dienstName} angelegt` : `${dienstName} gespeichert`);
       if (neu) navigate(`/dienst/${neueId}`, true);
       else zurueck(`/dienst/${neueId}`);
     } catch {
@@ -238,7 +259,7 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
     }
   };
 
-  const titel = `${zusatz ? 'Zusatzdienst' : 'Dienst'} ${neu ? 'anlegen' : 'bearbeiten'}`;
+  const titel = `${dienstName} ${neu ? 'anlegen' : 'bearbeiten'}`;
   const fuss = (
     <div className="knopfreihe knopfreihe--fuss">
       {!neu && (
@@ -247,7 +268,7 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
         </Knopf>
       )}
       <Knopf variante="primaer" onClick={() => void speichern()} disabled={speichert}>
-        {neu ? (zusatz ? 'Zusatzdienst speichern' : 'Dienst speichern') : 'Speichern'}
+        {neu ? `${dienstName} speichern` : 'Speichern'}
       </Knopf>
     </div>
   );
@@ -262,9 +283,14 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
           Zusatzdienst ohne Vorbelegung. Beginn und Ende bilden den Rahmen für die Einsätze darin. Er zählt nicht zu deinen Über- und Minusstunden.
         </Meldung>
       )}
+      {uebungsdienst && neu && (
+        <Meldung art="info">
+          Reiner Übungsdienst, zum Beispiel ein Übungsabend oder Lehrgangstag. Die ganze Zeit zählt als Übung und nicht zu deinen Über- und Minusstunden.
+        </Meldung>
+      )}
 
-      <Abschnitt titel={zusatz ? 'Zeitraum' : 'Dienst'}>
-        <Feld label={zusatz ? 'Beginn am' : 'Datum des Dienstbeginns'} fehler={zeigeFehler('datum')} htmlFor="dienst-datum">
+      <Abschnitt titel={frei ? 'Zeitraum' : 'Dienst'}>
+        <Feld label={frei ? 'Beginn am' : 'Datum des Dienstbeginns'} fehler={zeigeFehler('datum')} htmlFor="dienst-datum">
           <ChipReihe label="Datum wählen">
             <Chip aktiv={datum === heute} onClick={() => setDatum(heute)}>Heute</Chip>
             <Chip aktiv={datum === gestern} onClick={() => setDatum(gestern)}>Gestern</Chip>
@@ -278,7 +304,7 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
           />
         </Feld>
 
-        {zusatz ? (
+        {frei ? (
           <>
             <ZeitFeld
               label="Beginn"
@@ -339,7 +365,7 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
         )}
       </Abschnitt>
 
-      {!zusatz && (
+      {!frei && (
         <Aufklappen
           titel="Über- oder Minusstunden"
           zusatz={saldo ? fmtSaldo(saldo.saldoMin) : undefined}
@@ -387,38 +413,68 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
         </Aufklappen>
       )}
 
-      <Abschnitt titel={zusatz ? 'Rahmen' : 'Einsatzort und Besetzung'}>
+      {uebungsdienst && neu && (
+        <Abschnitt titel="Übung">
+          <KatalogAuswahl
+            label="Art der Übung"
+            katalogTyp="uebungsart"
+            vorschlaege={arten.vorschlaege}
+            alle={arten.alle}
+            ausgewaehlt={uebungArt}
+            onChange={setUebungArt}
+            ton="ue"
+            nutzung={arten.zaehler}
+            namenAusgewaehlt={arten.namen}
+            hinweis="Optional. Die Übung füllt den ganzen Dienst. Sollen es mehrere Übungen sein, lass die Art leer und erfasse sie danach einzeln im Dienst."
+          />
+          {uebungArt.length > 0 && (
+            <TextFeld label="Thema" wert={uebungThema} onChange={setUebungThema} maxLength={80} placeholder="z. B. Übungsstrecke" hinweis="Optional. Keine Namen." />
+          )}
+        </Abschnitt>
+      )}
+
+      <Abschnitt titel={uebungsdienst ? 'Ort' : zusatz ? 'Rahmen' : 'Einsatzort und Besetzung'}>
         <KatalogAuswahl
-          label={zusatz ? 'Stadt / Organisation' : 'Wache'}
-          katalogTyp={zusatz ? 'standort' : 'wache'}
+          label={uebungsdienst ? 'Ort / Organisation' : zusatz ? 'Stadt / Organisation' : 'Wache'}
+          katalogTyp={frei ? 'standort' : 'wache'}
           vorschlaege={wachen.vorschlaege}
           alle={wachen.alle}
           ausgewaehlt={wache}
           onChange={setWache}
           nutzung={wachen.zaehler}
           namenAusgewaehlt={wachen.namen}
-          hinweis={zusatz ? 'Zum Beispiel „Leverkusen Rettungsdienst“. Die Liste wächst mit.' : undefined}
+          hinweis={
+            uebungsdienst
+              ? 'Zum Beispiel „Feuerwehrschule“ oder „Wache 1“. Die Liste wächst mit.'
+              : zusatz
+                ? 'Zum Beispiel „Leverkusen Rettungsdienst“. Die Liste wächst mit.'
+                : undefined
+          }
         />
-        <KatalogAuswahl
-          label="Fahrzeug"
-          katalogTyp="fahrzeug"
-          vorschlaege={fahrzeuge.vorschlaege}
-          alle={fahrzeuge.alle}
-          ausgewaehlt={fahrzeug}
-          onChange={setFahrzeug}
-          nutzung={fahrzeuge.zaehler}
-          namenAusgewaehlt={fahrzeuge.namen}
-        />
-        <KatalogAuswahl
-          label={zusatz ? 'Funktion' : 'Rolle'}
-          katalogTyp="rolle"
-          vorschlaege={rollen.vorschlaege}
-          alle={rollen.alle}
-          ausgewaehlt={rolle}
-          onChange={setRolle}
-          nutzung={rollen.zaehler}
-          namenAusgewaehlt={rollen.namen}
-        />
+        {!uebungsdienst && (
+          <>
+            <KatalogAuswahl
+              label="Fahrzeug"
+              katalogTyp="fahrzeug"
+              vorschlaege={fahrzeuge.vorschlaege}
+              alle={fahrzeuge.alle}
+              ausgewaehlt={fahrzeug}
+              onChange={setFahrzeug}
+              nutzung={fahrzeuge.zaehler}
+              namenAusgewaehlt={fahrzeuge.namen}
+            />
+            <KatalogAuswahl
+              label={zusatz ? 'Funktion' : 'Rolle'}
+              katalogTyp="rolle"
+              vorschlaege={rollen.vorschlaege}
+              alle={rollen.alle}
+              ausgewaehlt={rolle}
+              onChange={setRolle}
+              nutzung={rollen.zaehler}
+              namenAusgewaehlt={rollen.namen}
+            />
+          </>
+        )}
         <TextFeld
           label="Notiz"
           wert={notiz}
@@ -444,6 +500,16 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
           {zuSpaet.length === 1 ? 'Ein Einsatz endet' : `${zuSpaet.length} Einsätze enden`} nach dem Dienstende. Stimmt das Ende?
         </Meldung>
       )}
+      {uebungenAusserhalb.length > 0 && (
+        <Meldung art="fehler">
+          {uebungenAusserhalb.length === 1 ? 'Eine Übung liegt' : `${uebungenAusserhalb.length} Übungen liegen`} außerhalb des neuen Zeitraums. Passe Beginn oder Ende an oder ändere zuerst die Übung.
+        </Meldung>
+      )}
+      {uebungenZuSpaet.length > 0 && (
+        <Meldung art="warnung">
+          {uebungenZuSpaet.length === 1 ? 'Eine Übung endet' : `${uebungenZuSpaet.length} Übungen enden`} nach dem Dienstende. Stimmt das Ende?
+        </Meldung>
+      )}
 
       <Bestaetigung
         offen={loeschen}
@@ -451,8 +517,13 @@ function Formular({ bestehend, zusatz, regelBeginn, zeitenOffen }: FormProps) {
         gefahr
         jaText="Endgültig löschen"
         text={
-          einsaetze.length > 0
-            ? `Der Dienst und seine ${einsaetze.length} ${einsaetze.length === 1 ? 'Einsatz' : 'Einsätze'} werden gelöscht. Das lässt sich nicht rückgängig machen.`
+          einsaetze.length + uebungen.length > 0
+            ? `Der Dienst wird mit ${[
+                einsaetze.length > 0 ? `${einsaetze.length} ${einsaetze.length === 1 ? 'Einsatz' : 'Einsätzen'}` : '',
+                uebungen.length > 0 ? `${uebungen.length} ${uebungen.length === 1 ? 'Übung' : 'Übungen'}` : '',
+              ]
+                .filter(Boolean)
+                .join(' und ')} gelöscht. Das lässt sich nicht rückgängig machen.`
             : 'Der Dienst wird gelöscht. Das lässt sich nicht rückgängig machen.'
         }
         onNein={() => setLoeschen(false)}

@@ -17,12 +17,36 @@ export type KatalogTyp =
   | 'fahrzeug'
   | 'wache'
   | 'standort'
+  /** Maßnahmen und Medikamente im Rettungsdienst. */
   | 'massnahme'
+  /** Maßnahmen im Feuerwehreinsatz, ausgeführt auf Befehl. */
+  | 'fwmassnahme'
   | 'diagnose'
   | 'ressource'
-  | 'tag';
+  | 'tag'
+  /** Art einer Übung, z. B. Atemschutz oder Reanimation. */
+  | 'uebungsart';
 
 export type MassnahmeArt = 'medikament' | 'invasiv' | 'sonstige';
+
+/** Gruppen der Feuerwehr-Maßnahmen; sie gliedern die Auswahl und die Auswertung. */
+export type FwGruppe = 'rettung' | 'brand' | 'technik' | 'gefahrstoff' | 'sonstige';
+export const FW_GRUPPEN: readonly FwGruppe[] = ['rettung', 'brand', 'technik', 'gefahrstoff', 'sonstige'];
+export const FW_GRUPPE_NAME: Record<FwGruppe, string> = {
+  rettung: 'Menschenrettung',
+  brand: 'Brandbekämpfung',
+  technik: 'Technische Hilfeleistung',
+  gefahrstoff: 'Gefahrstoffe',
+  sonstige: 'Absicherung und Sonstiges',
+};
+/** Kurzform für schmale Auswahlfelder. */
+export const FW_GRUPPE_KURZ: Record<FwGruppe, string> = {
+  rettung: 'Rettung',
+  brand: 'Brand',
+  technik: 'Technik',
+  gefahrstoff: 'Gefahrstoffe',
+  sonstige: 'Sonstiges',
+};
 export type Altersgruppe = 'saeugling' | 'kind' | 'erwachsener' | 'senior';
 
 export interface KatalogEintrag {
@@ -32,27 +56,34 @@ export interface KatalogEintrag {
   aktiv: boolean;
   /** Nur Kategorien: bei welchen Stichwort-Typen die Kategorie genutzt wird. */
   typen?: Typ[];
-  /** Nur Rollen und Fahrzeuge: für welchen Bereich sie vorgeschlagen werden. */
+  /** Nur Rollen, Fahrzeuge und Übungsarten: für welchen Bereich sie vorgeschlagen werden. */
   bereich?: Bereich;
-  /** Nur Maßnahmen. */
+  /** Nur Maßnahmen im Rettungsdienst. */
   art?: MassnahmeArt;
+  /** Nur Feuerwehr-Maßnahmen. */
+  gruppe?: FwGruppe;
   /** Nur Maßnahmen aus dem Kompendium: Schlüssel für die Einordnung (z. B. „med:epinephrin“). */
   kompendiumKey?: string;
 }
 
 /**
- * Rechtsgrundlage, auf der eine Maßnahme durchgeführt wurde.
- * vorab: vorabdelegiert nach § 4 Abs. 2 Nr. 2c NotSanG (★ im Kompendium)
- * eigen: eigenverantwortlich nach § 2a NotSanG
- * arzt: auf Anordnung von Notarzt oder Telenotarzt (§ 4 Abs. 2 Nr. 2b NotSanG)
+ * Grundlage, auf der eine Maßnahme durchgeführt wurde.
+ * Rettungsdienst:
+ *  vorab: vorabdelegiert nach § 4 Abs. 2 Nr. 2c NotSanG (★ im Kompendium)
+ *  eigen: eigenverantwortlich nach § 2a NotSanG
+ *  arzt: auf Anordnung von Notarzt oder Telenotarzt (§ 4 Abs. 2 Nr. 2b NotSanG)
+ * Feuerwehr:
+ *  befehl: auf Befehl des Einsatzleiters oder Gruppenführers
  */
-export type Durchfuehrung = 'vorab' | 'eigen' | 'arzt';
+export type Durchfuehrung = 'vorab' | 'eigen' | 'arzt' | 'befehl';
+/** Die Auswahl im Rettungsdienst; im Feuerwehreinsatz gilt immer „Auf Befehl“. */
 export const DURCHFUEHRUNGEN: readonly Durchfuehrung[] = ['vorab', 'eigen', 'arzt'];
 
 export const DURCHFUEHRUNG_INFO: Record<Durchfuehrung, { kurz: string; lang: string }> = {
   vorab: { kurz: 'Vorabdelegation', lang: 'Vorabdelegiert nach § 4 Abs. 2 Nr. 2c NotSanG (★ im Kompendium)' },
   eigen: { kurz: 'Eigenverantwortlich', lang: 'Eigenverantwortlich nach § 2a NotSanG' },
   arzt: { kurz: 'Auf Anordnung', lang: 'Auf Anordnung von Notarzt oder Telenotarzt (§ 4 Abs. 2 Nr. 2b NotSanG)' },
+  befehl: { kurz: 'Auf Befehl', lang: 'Auf Befehl des Einsatzleiters oder Gruppenführers ausgeführt' },
 };
 
 /**
@@ -117,14 +148,48 @@ export interface Dienst {
    * Zusatzdienste zählen nicht zu den Über- und Minusstunden und lassen sich getrennt auswerten.
    */
   zusatzdienst?: boolean;
+  /**
+   * Reiner Übungsdienst, z. B. ein Übungsabend oder Lehrgangstag: Die ganze Dienstzeit zählt als Übung.
+   * Wie ein Zusatzdienst hat er keinen Plan (Soll = Ist) und zählt nicht zu den Über- und Minusstunden.
+   * Der Ort steht in `wacheId` (Liste „standort“).
+   */
+  uebungsdienst?: boolean;
   notiz?: string;
 }
 
+/** Wie ein Dienst geführt wird: nach Plan, als Zusatzdienst oder als reiner Übungsdienst. */
+export type Dienstart = 'regel' | 'zusatz' | 'uebung';
+
+export const dienstartVon = (d: Pick<Dienst, 'zusatzdienst' | 'uebungsdienst'>): Dienstart =>
+  d.uebungsdienst ? 'uebung' : d.zusatzdienst ? 'zusatz' : 'regel';
+
+export const DIENSTART_NAME: Record<Dienstart, string> = { regel: 'Regeldienst', zusatz: 'Zusatzdienst', uebung: 'Übungsdienst' };
+
+/** Nur Regeldienste haben einen Plan und damit Über- und Minusstunden. */
+export const hatPlan = (d: Pick<Dienst, 'zusatzdienst' | 'uebungsdienst'>): boolean => !d.zusatzdienst && !d.uebungsdienst;
+
 export interface MassnahmeEintrag {
+  /** Eintrag der Liste „massnahme“ (Rettungsdienst) oder „fwmassnahme“ (Feuerwehr). */
   massnahmeId: number;
   anzahl: number;
-  /** Fehlt bei sonstigen Maßnahmen, die keine Heilkunde-Einordnung brauchen. */
+  /** Fehlt bei sonstigen Maßnahmen im Rettungsdienst, die keine Heilkunde-Einordnung brauchen. */
   durchfuehrung?: Durchfuehrung;
+}
+
+/**
+ * Eine Übung als Einsatzart neben Rettungsdienst und Feuerwehr. Sie gehört zu einem Dienst, entweder zu
+ * einer normalen Schicht oder zu einem reinen Übungsdienst, zählt aber nicht als Einsatz.
+ */
+export interface Uebung {
+  id?: number;
+  dienstId: number;
+  beginn: number;
+  ende: number;
+  /** Art der Übung (Liste „uebungsart“). */
+  artId: number;
+  /** Frei gewähltes Thema, z. B. „Atemschutzstrecke“. */
+  thema?: string;
+  notiz?: string;
 }
 
 export interface Nachforderung {

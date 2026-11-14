@@ -5,7 +5,7 @@ import { speichereEinstellungen } from '../db/einstellungen';
 import { sorgeFuerStartlisten } from '../db/seed';
 import { MIN, STUNDE, zeitpunkt } from '../domain/time';
 import { bewertungVorschlag } from '../domain/triage';
-import type { Ausgang, Dienst, Durchfuehrung, Einsatz, KatalogEintrag, MassnahmeEintrag, Typ } from '../domain/types';
+import type { Ausgang, Dienst, Durchfuehrung, Einsatz, KatalogEintrag, MassnahmeEintrag, Typ, Uebung } from '../domain/types';
 
 function zufall(seed: number) {
   let a = seed;
@@ -41,16 +41,20 @@ const tag = (ms: number, offset: number): string => {
 };
 
 export async function ladeDemodaten(): Promise<void> {
-  await db.transaction('rw', db.dienste, db.einsaetze, db.katalog, db.meta, async () => {
-    await Promise.all([db.dienste.clear(), db.einsaetze.clear(), db.katalog.clear(), db.meta.clear()]);
+  await db.transaction('rw', db.dienste, db.einsaetze, db.uebungen, db.katalog, db.meta, async () => {
+    await Promise.all([db.dienste.clear(), db.einsaetze.clear(), db.uebungen.clear(), db.katalog.clear(), db.meta.clear()]);
   });
   await sorgeFuerStartlisten();
 
   const standortId = await db.katalog.add({ typ: 'standort', name: 'Leverkusen (Sanitätsdienst)', aktiv: true } as KatalogEintrag);
+  const schuleId = await db.katalog.add({ typ: 'standort', name: 'Feuerwehrschule', aktiv: true } as KatalogEintrag);
+  const uebungswacheId = await db.katalog.add({ typ: 'standort', name: 'Wache 1 (Übungsabend)', aktiv: true } as KatalogEintrag);
   const katalog = await db.katalog.toArray();
   const id = (typ: string, name: string) => katalog.find((k) => k.typ === typ && k.name === name)?.id;
   const kat = (name: string) => id('kategorie', name)!;
   const massn = (name: string) => id('massnahme', name)!;
+  const fwMassn = (name: string) => id('fwmassnahme', name)!;
+  const art = (name: string) => id('uebungsart', name)!;
   const diag = (name: string) => id('diagnose', name)!;
   const r = zufall(7);
   const wahl = <T,>(liste: readonly T[]): T => liste[Math.floor(r() * liste.length)];
@@ -112,11 +116,31 @@ export async function ladeDemodaten(): Promise<void> {
     const e = zeitpunkt(tag(jetzt, -versatz + 1), 2, 0);
     dienste.push({ sollBeginn: b, sollEnde: e, beginn: b, ende: e, wacheId: standortId, fahrzeugId: rtw, rolleId: tf, zusatzdienst: true });
   }
+  // Zwei reine Übungsdienste: ein Samstag in der Feuerwehrschule und ein Übungsabend an der Wache.
+  const schulTag = tag(jetzt, -13);
+  dienste.push({
+    sollBeginn: zeitpunkt(schulTag, 8, 0),
+    sollEnde: zeitpunkt(schulTag, 16, 0),
+    beginn: zeitpunkt(schulTag, 8, 0),
+    ende: zeitpunkt(schulTag, 16, 0),
+    wacheId: schuleId,
+    uebungsdienst: true,
+  });
+  const abendTag = tag(jetzt, -41);
+  dienste.push({
+    sollBeginn: zeitpunkt(abendTag, 19, 30),
+    sollEnde: zeitpunkt(abendTag, 22, 0),
+    beginn: zeitpunkt(abendTag, 19, 30),
+    ende: zeitpunkt(abendTag, 22, 0),
+    wacheId: uebungswacheId,
+    uebungsdienst: true,
+  });
   for (const d of dienste) dienstIds.push(await db.dienste.add(d));
 
   const medDurchfuehrung = (m: string): Durchfuehrung => (['Epinephrin', 'Midazolam', 'Morphin', 'Esketamin', 'Fentanyl'].includes(m) ? 'vorab' : 'eigen');
 
   dienste.forEach((d, i) => {
+    if (d.uebungsdienst) return;
     const dienstId = dienstIds[i];
     const laufend = i === 0;
     const anzahl = d.zusatzdienst ? 2 : laufend ? 3 : 3 + Math.floor(r() * 5);
@@ -189,6 +213,14 @@ export async function ladeDemodaten(): Promise<void> {
         }
         if (r() > 0.85) e.nachalarmiert = true;
         if (typ === 'F' && !e.mig && r() > 0.7) e.ausgang = 'fehleinsatz';
+        // Maßnahmen auf Befehl: nach Art des Einsatzes.
+        const namen: string[] =
+          typ === 'F'
+            ? ['Erkundung', wahl(['Löschangriff im Innenangriff', 'Löschangriff im Außenangriff']), 'Wasserversorgung herstellen', ...(r() > 0.5 ? ['Belüftung und Entrauchung'] : []), ...(r() > 0.6 ? ['Nachlöscharbeiten und Brandnachschau'] : [])]
+            : typ === 'ABC'
+              ? ['Messen (Gas, CO, Ex)', 'Absperrung und Gefahrenbereich']
+              : [wahl(['Türöffnung (Notöffnung)', 'Aufzugbefreiung', 'Ölspur abstreuen', 'Tragehilfe für den Rettungsdienst', 'Absperrung und Gefahrenbereich'])];
+        e.massnahmen = namen.map((n) => ({ massnahmeId: fwMassn(n), anzahl: 1, durchfuehrung: 'befehl' as const }));
       }
       if (k === 0 && i === 1) e.notiz = 'Anfahrt über Umleitung, Zugang schwierig.';
       einsaetze.push(e);
@@ -196,6 +228,33 @@ export async function ladeDemodaten(): Promise<void> {
     }
   });
   await db.einsaetze.bulkAdd(einsaetze);
+
+  // Übungen in der Schicht: nachmittags auf Wache, bei einigen Regeldiensten.
+  const uebungen: Uebung[] = [];
+  const inSchicht: [number, string, string][] = [
+    [1, 'Atemschutzübung', 'Übungsstrecke'],
+    [4, 'Reanimation', 'Teamtraining'],
+    [7, 'Fahrzeug- und Gerätekunde', 'HLF Beladung'],
+    [10, 'Dienstsport', ''],
+    [13, 'Technische Hilfeleistung', 'Hydraulisches Rettungsgerät'],
+    [16, 'Atemschutzübung', ''],
+  ];
+  for (const [i, artName, thema] of inSchicht) {
+    const d = dienste[i];
+    if (!d || d.zusatzdienst || d.uebungsdienst) continue;
+    const beginn = d.beginn + 390 * MIN;
+    uebungen.push({ dienstId: dienstIds[i], beginn, ende: beginn + 90 * MIN, artId: art(artName), ...(thema ? { thema } : {}) });
+  }
+  // Der Übungstag in der Feuerwehrschule mit zwei Übungen und einer Mittagspause dazwischen.
+  const schulIndex = dienste.findIndex((d) => d.uebungsdienst && d.wacheId === schuleId);
+  const schule = dienste[schulIndex];
+  uebungen.push({ dienstId: dienstIds[schulIndex], beginn: schule.beginn, ende: schule.beginn + 210 * MIN, artId: art('Atemschutzübung'), thema: 'Übungsstrecke und Brandcontainer' });
+  uebungen.push({ dienstId: dienstIds[schulIndex], beginn: schule.beginn + 270 * MIN, ende: schule.ende, artId: art('Technische Hilfeleistung'), thema: 'Verkehrsunfall, Fahrzeugrettung' });
+  // Der Übungsabend: eine Übung füllt den ganzen Dienst.
+  const abendIndex = dienste.findIndex((d) => d.uebungsdienst && d.wacheId === uebungswacheId);
+  const abend = dienste[abendIndex];
+  uebungen.push({ dienstId: dienstIds[abendIndex], beginn: abend.beginn, ende: abend.ende, artId: art('Löschübung'), thema: 'Wasserentnahme aus offenem Gewässer' });
+  await db.uebungen.bulkAdd(uebungen);
   await speichereEinstellungen({ letztesBackup: jetzt - 8 * 24 * STUNDE, letzterDienstId: dienstIds[0], standardWacheId: wache1, standardFahrzeugId: rtw, standardRolleId: tf });
   void heute;
 }

@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
 import {
+  berechneFwMassnahmen,
   berechneMassnahmen,
   berechneStatistik,
   verfuegbareJahre,
   waehleEinsaetze,
+  type FwMassnahmenGruppe,
   type MassnahmenZeile,
   type StatFilter,
 } from '../domain/stats';
+import { berechneUebungen } from '../domain/uebungen';
 import { berechneTriage } from '../domain/triageStats';
 import { stichwortText, TYP_INFO } from '../domain/stichwort';
 import { fmtDauer, fmtSaldo, fmtStunden, fmtZahl } from '../domain/time';
-import { bereichVon, DURCHFUEHRUNG_INFO, type MassnahmeArt } from '../domain/types';
+import { bereichVon, DURCHFUEHRUNG_INFO, FW_GRUPPE_NAME, type MassnahmeArt } from '../domain/types';
 import { navigate } from '../router';
 import { katalogName, useDaten } from '../state/daten';
 import { Balken, ChartKarte, FarbLegende, Saeulen, SaldoSaeulen, ZeitBalken } from '../ui/charts';
@@ -78,12 +81,39 @@ function MassnahmenTabelle({ art, zeilen }: { art: MassnahmeArt; zeilen: Massnah
   );
 }
 
+function FwMassnahmenTabelle({ gruppe }: { gruppe: FwMassnahmenGruppe }) {
+  return (
+    <div className="tabelle-huelle">
+      <table className="tabelle tabelle--massnahmen tabelle--einsaetze">
+        <caption className="tabelle__titel">{FW_GRUPPE_NAME[gruppe.gruppe]}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Maßnahme</th>
+            <th scope="col" className="zahl">Anzahl</th>
+            <th scope="col" className="zahl">Einsätze</th>
+          </tr>
+        </thead>
+        <tbody>
+          {gruppe.zeilen.map((z) => (
+            <tr key={z.massnahmeId}>
+              <th scope="row">{z.name}</th>
+              <td className="zahl">{fmtZahl(z.anzahl)}</td>
+              <td className="zahl">{z.einsaetze}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function Statistik() {
   const daten = useDaten();
-  const { dienste, einsaetze, einst, katalogMap } = daten;
+  const { dienste, einsaetze, uebungen, einst, katalogMap } = daten;
 
-  const jahre = useMemo(() => verfuegbareJahre(dienste, einsaetze), [dienste, einsaetze]);
+  const jahre = useMemo(() => verfuegbareJahre(dienste, einsaetze, uebungen), [dienste, einsaetze, uebungen]);
   const hatZusatz = useMemo(() => dienste.some((d) => d.zusatzdienst), [dienste]);
+  const hatUebungsdienst = useMemo(() => dienste.some((d) => d.uebungsdienst), [dienste]);
 
   const [jahrRoh, setJahrRoh] = useState<number | null | undefined>(gemerkt.jahr);
   const [bereich, setBereichRoh] = useState<StatFilter['bereich']>(gemerkt.bereich);
@@ -92,7 +122,8 @@ export function Statistik() {
   const aktuell = new Date().getFullYear();
   const standardJahr = jahre.includes(aktuell) ? aktuell : (jahre[0] ?? null);
   const jahr = jahrRoh === undefined ? standardJahr : jahrRoh === null || jahre.includes(jahrRoh) ? jahrRoh : null;
-  const dienstart = hatZusatz ? dienstartRoh : 'alle';
+  // Eine gemerkte Dienstart, die es (nach Löschen) nicht mehr gibt, fällt auf „Alle“ zurück.
+  const dienstart = (dienstartRoh === 'zusatz' && hatZusatz) || (dienstartRoh === 'uebung' && hatUebungsdienst) || dienstartRoh === 'regel' ? dienstartRoh : 'alle';
 
   const setJahr = (j: number | null) => {
     gemerkt.jahr = j;
@@ -109,19 +140,21 @@ export function Statistik() {
 
   const filter = useMemo<StatFilter>(() => ({ jahr, bereich, dienstart }), [jahr, bereich, dienstart]);
   const s = useMemo(
-    () => berechneStatistik(dienste, einsaetze, filter, einst.wachzeitMitDienstRand),
-    [dienste, einsaetze, filter, einst.wachzeitMitDienstRand],
+    () => berechneStatistik(dienste, einsaetze, filter, einst.wachzeitMitDienstRand, uebungen),
+    [dienste, einsaetze, uebungen, filter, einst.wachzeitMitDienstRand],
   );
+  const ueb = useMemo(() => berechneUebungen(dienste, uebungen, filter, katalogMap, einsaetze), [dienste, uebungen, filter, katalogMap, einsaetze]);
   const gewaehlt = useMemo(() => waehleEinsaetze(dienste, einsaetze, filter), [dienste, einsaetze, filter]);
   const massn = useMemo(() => berechneMassnahmen(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
+  const fwMassn = useMemo(() => berechneFwMassnahmen(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
   const triage = useMemo(() => berechneTriage(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
 
-  if (dienste.length === 0 && einsaetze.length === 0) {
+  if (dienste.length === 0 && einsaetze.length === 0 && uebungen.length === 0) {
     return (
       <Seite titel="Statistik">
         <Leer
           titel="Noch nichts auszuwerten"
-          text="Sobald du Dienste und Einsätze erfasst hast, siehst du hier Zahlen, Zeiten, Maßnahmen und Überstunden."
+          text="Sobald du Dienste, Einsätze und Übungen erfasst hast, siehst du hier Zahlen, Zeiten, Maßnahmen und Überstunden."
           aktion={<Knopf variante="primaer" onClick={() => navigate('/dienst/neu')}>Dienst anlegen</Knopf>}
         />
       </Seite>
@@ -129,14 +162,14 @@ export function Statistik() {
   }
 
   const zeitraum = jahr == null ? 'Gesamt' : String(jahr);
-  const leer = s.anzahl === 0 && s.dienste === 0;
+  const leer = s.anzahl === 0 && s.dienste === 0 && ueb.anzahl === 0;
   const z = s.zeiten;
-  const zugeordnetMin = z.einsatzMin + z.rueckfahrtMin + z.wacheMin;
+  const zugeordnetMin = z.einsatzMin + z.rueckfahrtMin + z.wacheMin + z.uebungMin;
   const offenMin = Math.max(0, z.dienstMin - zugeordnetMin);
   const zeitSumme = Math.max(z.dienstMin, zugeordnetMin);
   const stichwortName = (typ: Parameters<typeof stichwortText>[0], kategorieId: number) =>
     stichwortText(typ, katalogName(daten, kategorieId));
-  const regelDienste = dienstart !== 'zusatz';
+  const regelDienste = dienstart === 'alle' || dienstart === 'regel';
   const ue = s.ueberstunden;
   const hatUeberstunden = ue.diensteMitPlus + ue.diensteMitMinus > 0;
   const massnNachArt = (['medikament', 'invasiv', 'sonstige'] as const)
@@ -166,7 +199,7 @@ export function Statistik() {
             { wert: 'FW', label: 'Feuerwehr', ton: 'fw' },
           ]}
         />
-        {hatZusatz && (
+        {(hatZusatz || hatUebungsdienst) && (
           <Segment<StatFilter['dienstart']>
             label="Dienstart"
             klein
@@ -174,8 +207,9 @@ export function Statistik() {
             onChange={setDienstart}
             optionen={[
               { wert: 'alle', label: 'Alle Dienste' },
-              { wert: 'regel', label: 'Regeldienst' },
-              { wert: 'zusatz', label: 'Zusatzdienste' },
+              { wert: 'regel', label: 'Regeldienste' },
+              ...(hatZusatz ? [{ wert: 'zusatz' as const, label: 'Zusatzdienste' }] : []),
+              ...(hatUebungsdienst ? [{ wert: 'uebung' as const, label: 'Übungsdienste' }] : []),
             ]}
           />
         )}
@@ -246,12 +280,19 @@ export function Statistik() {
 
               <ChartKarte
                 titel="Einsatzart"
-                tabelle={{ kopf: ['Typ', 'Anzahl'], zeilen: s.typ.map((t) => [`${t.typ} ${TYP_INFO[t.typ].kurz}`, t.n]) }}
+                untertitel={ueb.anzahl > 0 ? 'Übungen zählen nicht zu den Einsätzen' : undefined}
+                tabelle={{
+                  kopf: ['Art', 'Anzahl'],
+                  zeilen: [...s.typ.map((t) => [`${t.typ} ${TYP_INFO[t.typ].kurz}`, t.n]), ...(ueb.anzahl > 0 ? [['Ü Übung', ueb.anzahl]] : [])],
+                }}
               >
                 <Balken
-                  zeilen={s.typ
-                    .filter((t) => t.n > 0)
-                    .map((t) => ({ label: `${t.typ} ${TYP_INFO[t.typ].kurz}`, wert: t.n, ton: bereichVon(t.typ) === 'RD' ? 'rd' : 'fw' }))}
+                  zeilen={[
+                    ...s.typ
+                      .filter((t) => t.n > 0)
+                      .map((t) => ({ label: `${t.typ} ${TYP_INFO[t.typ].kurz}`, wert: t.n, ton: bereichVon(t.typ) === 'RD' ? ('rd' as const) : ('fw' as const) })),
+                    ...(ueb.anzahl > 0 ? [{ label: 'Ü Übung', wert: ueb.anzahl, ton: 'ue' as const }] : []),
+                  ]}
                 />
               </ChartKarte>
 
@@ -278,11 +319,13 @@ export function Statistik() {
                 ['Im Einsatz', fmtDauer(z.einsatzMin), prozent(z.einsatzMin, zeitSumme)],
                 ['Rückfahrt', fmtDauer(z.rueckfahrtMin), prozent(z.rueckfahrtMin, zeitSumme)],
                 ['Auf Wache', fmtDauer(z.wacheMin), prozent(z.wacheMin, zeitSumme)],
+                ...(z.uebungMin > 0 ? [['Übung', fmtDauer(z.uebungMin), prozent(z.uebungMin, zeitSumme)]] : []),
                 ...(offenMin > 0 ? [['Nicht zugeordnet', fmtDauer(offenMin), prozent(offenMin, zeitSumme)]] : []),
               ],
             }}
           >
-            <ZeitBalken einsatzMin={z.einsatzMin} rueckfahrtMin={z.rueckfahrtMin} wacheMin={z.wacheMin} offenMin={offenMin} />
+            <ZeitBalken einsatzMin={z.einsatzMin} rueckfahrtMin={z.rueckfahrtMin} wacheMin={z.wacheMin} uebungMin={z.uebungMin} offenMin={offenMin} />
+            {z.uebungMin > 0 && <p className="hinweis">Übung: Zeit, in der du auf Wache oder im Übungsdienst geübt hast. Sie zählt nicht zur Wachzeit.</p>}
           </ChartKarte>
           {z.ohneStatus2 > 0 && (
             <Meldung art="warnung">
@@ -298,7 +341,9 @@ export function Statistik() {
 
           <Abschnitt titel="Über- und Minusstunden">
             {!regelDienste ? (
-              <Meldung art="info">Zusatzdienste haben keinen Plan und zählen deshalb nicht zu den Über- und Minusstunden.</Meldung>
+              <Meldung art="info">
+                {dienstart === 'uebung' ? 'Übungsdienste haben' : 'Zusatzdienste haben'} keinen Plan und zählen deshalb nicht zu den Über- und Minusstunden.
+              </Meldung>
             ) : !hatUeberstunden ? (
               <p className="hinweis">
                 In {zeitraum} gibt es keine Abweichung vom Plan. Zeiten vor dem Dienstbeginn, nach dem Dienstende oder eine frühere Ablösung trägst du im Dienst unter „Zeiten ändern“ ein.
@@ -321,6 +366,7 @@ export function Statistik() {
             )}
           </Abschnitt>
 
+          {bereich !== 'FW' && (
           <Abschnitt titel="Maßnahmen-Nachweis">
             {massn.zeilen.length === 0 ? (
               <p className="hinweis">In {zeitraum} sind keine Maßnahmen oder Medikamente erfasst.</p>
@@ -341,6 +387,7 @@ export function Statistik() {
               </>
             )}
           </Abschnitt>
+          )}
 
           {bereich !== 'RD' && s.feuerwehr.einsaetze > 0 && (
             <Abschnitt titel="Feuerwehr">
@@ -350,8 +397,79 @@ export function Statistik() {
                 <Kpi wert={fmtZahl(s.feuerwehr.atemschutz)} label="Atemschutzeinsätze" ton="fw" />
                 <Kpi wert={fmtDauer(s.feuerwehr.atemschutzMin)} label="Unter Atemschutz" ton="fw" zusatz={s.feuerwehr.atemschutz > 0 ? `Ø ${fmtDauer(s.feuerwehr.atemschutzMin / s.feuerwehr.atemschutz)} je Einsatz` : undefined} />
               </KpiRaster>
+              {fwMassn.summe.anzahl > 0 ? (
+                <>
+                  <KpiRaster>
+                    <Kpi
+                      wert={fmtZahl(fwMassn.summe.anzahl)}
+                      label="Maßnahmen auf Befehl"
+                      ton="fw"
+                      zusatz={`in ${fwMassn.summe.einsaetze} ${fwMassn.summe.einsaetze === 1 ? 'Einsatz' : 'Einsätzen'}`}
+                    />
+                    <Kpi wert={fmtZahl(fwMassn.summe.verschiedene)} label="Verschiedene Maßnahmen" ton="fw" />
+                  </KpiRaster>
+                  {fwMassn.gruppen.map((g) => (
+                    <FwMassnahmenTabelle key={g.gruppe} gruppe={g} />
+                  ))}
+                  <p className="hinweis">Gezählt wird, wie oft du die Maßnahme auf Befehl selbst ausgeführt hast.</p>
+                </>
+              ) : (
+                <p className="hinweis">In {zeitraum} sind keine Maßnahmen auf Befehl erfasst.</p>
+              )}
             </Abschnitt>
           )}
+
+          <Abschnitt titel="Übungen">
+            {ueb.minuten === 0 ? (
+              <p className="hinweis">
+                In {zeitraum} sind keine Übungen erfasst. Du erfasst sie im Einsatzformular als Einsatzart „Ü Übung“ oder legst einen Übungsdienst an.
+              </p>
+            ) : (
+              <>
+                <KpiRaster>
+                  <Kpi ton="ue" wert={fmtStunden(ueb.minuten)} label="Übungszeit" zusatz={`${ueb.anzahl} ${ueb.anzahl === 1 ? 'Übung' : 'Übungen'} erfasst`} />
+                  {ueb.anzahl > 0 && (
+                    <Kpi ton="ue" wert={fmtDauer((ueb.minuten - ueb.restMin) / ueb.anzahl)} label="Ø je Übung" zusatz="erfasste Übungen" />
+                  )}
+                  <Kpi
+                    ton="ue"
+                    wert={fmtStunden(ueb.inSchicht.minuten)}
+                    label="In der Schicht"
+                    zusatz={`${ueb.inSchicht.anzahl} ${ueb.inSchicht.anzahl === 1 ? 'Übung' : 'Übungen'}`}
+                  />
+                  <Kpi
+                    ton="ue"
+                    wert={fmtStunden(ueb.imUebungsdienst.minuten)}
+                    label="Im Übungsdienst"
+                    zusatz={`${ueb.imUebungsdienst.dienste} ${ueb.imUebungsdienst.dienste === 1 ? 'Dienst' : 'Dienste'}`}
+                  />
+                </KpiRaster>
+                <ChartKarte
+                  titel="Übungszeit nach Art"
+                  untertitel={zeitraum}
+                  tabelle={{
+                    kopf: ['Art', 'Übungen', 'Dauer'],
+                    zeilen: [
+                      ...ueb.nachArt.map((a) => [a.name, a.anzahl, fmtDauer(a.minuten)]),
+                      ...(ueb.restMin > 0 ? [['Nicht aufgeschlüsselt', '–', fmtDauer(ueb.restMin)]] : []),
+                    ],
+                  }}
+                >
+                  <Balken
+                    zeilen={[
+                      ...ueb.nachArt.map((a) => ({ label: a.name, wert: a.minuten, text: fmtStunden(a.minuten), zusatz: `${a.anzahl}×`, ton: 'ue' as const })),
+                      ...(ueb.restMin > 0 ? [{ label: 'Nicht aufgeschlüsselt', wert: ueb.restMin, text: fmtStunden(ueb.restMin), ton: 'neutral' as const }] : []),
+                    ]}
+                  />
+                </ChartKarte>
+                {ueb.restMin > 0 && (
+                  <p className="hinweis">
+                    Nicht aufgeschlüsselt ist Zeit in Übungsdiensten, für die keine Übung erfasst ist, zum Beispiel Pausen. Die ganze Zeit des Dienstes zählt als Übung.
+                  </p>
+                )}
+              </>
+            )}
+          </Abschnitt>
 
           <Abschnitt titel="Nachforderungen">
             {s.nachalarmiert + s.mitNachforderung === 0 ? (

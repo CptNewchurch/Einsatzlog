@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { berechneMassnahmen, berechneStatistik, median, verfuegbareJahre, waehleEinsaetze } from '../src/domain/stats';
+import { berechneFwMassnahmen, berechneMassnahmen, berechneStatistik, median, verfuegbareJahre, waehleEinsaetze } from '../src/domain/stats';
 import { zeitpunkt } from '../src/domain/time';
 import type { Dienst, Einsatz, KatalogEintrag } from '../src/domain/types';
 
@@ -185,5 +185,49 @@ describe('Maßnahmen-Nachweis', () => {
       zeilen: [],
       summe: { anzahl: 0, vorab: 0, eigen: 0, arzt: 0, einsaetze: 0 },
     });
+  });
+});
+
+describe('Maßnahmen auf Befehl (Feuerwehr)', () => {
+  const katalog = new Map<number, KatalogEintrag>([
+    [1, { id: 1, typ: 'massnahme', name: 'i.v.-Zugang', aktiv: true, art: 'invasiv' }],
+    [10, { id: 10, typ: 'fwmassnahme', name: 'Löschangriff im Innenangriff', aktiv: true, gruppe: 'brand' }],
+    [11, { id: 11, typ: 'fwmassnahme', name: 'Erkundung', aktiv: true, gruppe: 'brand' }],
+    [12, { id: 12, typ: 'fwmassnahme', name: 'Türöffnung (Notöffnung)', aktiv: true, gruppe: 'technik' }],
+    [13, { id: 13, typ: 'fwmassnahme', name: 'Eigene Maßnahme', aktiv: true }],
+  ]);
+  const basis = { dienstId: 1, kategorieId: 20, alarm: 0, status1: 60_000 };
+  const liste: Einsatz[] = [
+    { ...basis, id: 1, typ: 'F', massnahmen: [{ massnahmeId: 11, anzahl: 1, durchfuehrung: 'befehl' }, { massnahmeId: 10, anzahl: 2, durchfuehrung: 'befehl' }] },
+    { ...basis, id: 2, typ: 'F', massnahmen: [{ massnahmeId: 10, anzahl: 1, durchfuehrung: 'befehl' }] },
+    { ...basis, id: 3, typ: 'H', massnahmen: [{ massnahmeId: 12, anzahl: 1, durchfuehrung: 'befehl' }, { massnahmeId: 13, anzahl: 1, durchfuehrung: 'befehl' }] },
+    { ...basis, id: 4, typ: 'R', kategorieId: 10, massnahmen: [{ massnahmeId: 1, anzahl: 1, durchfuehrung: 'eigen' }] },
+    { ...basis, id: 5, typ: 'H' },
+  ];
+
+  it('gruppiert nach Gruppe, die größte zuerst, und zählt Anzahl und Einsätze', () => {
+    const m = berechneFwMassnahmen(liste, katalog);
+    expect(m.summe).toEqual({ anzahl: 6, einsaetze: 3, verschiedene: 4 });
+    expect(m.gruppen.map((g) => [g.gruppe, g.anzahl])).toEqual([['brand', 4], ['technik', 1], ['sonstige', 1]]);
+    expect(m.gruppen[0].zeilen).toEqual([
+      { massnahmeId: 10, name: 'Löschangriff im Innenangriff', anzahl: 3, einsaetze: 2 },
+      { massnahmeId: 11, name: 'Erkundung', anzahl: 1, einsaetze: 1 },
+    ]);
+  });
+
+  it('ordnet Maßnahmen ohne Gruppe den sonstigen zu', () => {
+    const m = berechneFwMassnahmen(liste, katalog);
+    expect(m.gruppen.find((g) => g.gruppe === 'sonstige')!.zeilen.map((z) => z.name)).toEqual(['Eigene Maßnahme']);
+  });
+
+  it('Rettungsdienst-Maßnahmen zählen dort nicht mit', () => {
+    const m = berechneFwMassnahmen([liste[3], liste[4]], katalog);
+    expect(m).toEqual({ gruppen: [], summe: { anzahl: 0, einsaetze: 0, verschiedene: 0 } });
+  });
+
+  it('der Nachweis im Rettungsdienst ignoriert Feuerwehr-Maßnahmen', () => {
+    const m = berechneMassnahmen(liste, katalog);
+    expect(m.summe).toEqual({ anzahl: 1, vorab: 0, eigen: 1, arzt: 0, einsaetze: 1 });
+    expect(m.zeilen.map((z) => z.name)).toEqual(['i.v.-Zugang']);
   });
 });

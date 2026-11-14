@@ -28,6 +28,10 @@
   --fw-text: #b02a1b;
   --fw-hell: #fbe8e4;
   --fw-auf: #ffffff;
+  --ue: #7a4fd1;
+  --ue-text: #5b35b0;
+  --ue-hell: #efe9fb;
+  --ue-auf: #ffffff;
 
   --spur: #dce2ea;
   --gitter: #e3e7ed;
@@ -87,6 +91,10 @@
   --fw-text: #ff8f7f;
   --fw-hell: #3e1d1f;
   --fw-auf: #0b1424;
+  --ue: #a98af0;
+  --ue-text: #c2aaf7;
+  --ue-hell: #2a2050;
+  --ue-auf: #0b1424;
 
   --spur: #26364f;
   --gitter: #1e2e48;
@@ -777,6 +785,11 @@ button {
   color: var(--fw-text);
 }
 
+.chip--ue {
+  border-color: var(--ue);
+  color: var(--ue-text);
+}
+
 .chip--neu {
   border-style: dashed;
   border-color: var(--rand-stark);
@@ -804,6 +817,12 @@ button {
   border-color: var(--fw-knopf);
   background: var(--fw-knopf);
   color: var(--fw-auf);
+}
+
+.chip--ue[aria-pressed='true'] {
+  border-color: var(--ue);
+  background: var(--ue);
+  color: var(--ue-auf);
 }
 
 .segment {
@@ -845,6 +864,11 @@ button {
 .segment__opt--fw[aria-checked='true'] {
   background: var(--fw-knopf);
   color: var(--fw-auf);
+}
+
+.segment__opt--ue[aria-checked='true'] {
+  background: var(--ue);
+  color: var(--ue-auf);
 }
 
 .segment--klein .segment__opt {
@@ -1032,6 +1056,10 @@ button {
   background: var(--fw);
 }
 
+.zahlpunkt--ue::before {
+  background: var(--ue);
+}
+
 .marke {
   display: inline-block;
   padding: 1px 7px;
@@ -1062,6 +1090,20 @@ button {
 
 .einsatzzeile--fw {
   border-left-color: var(--fw);
+}
+
+.einsatzzeile--ue {
+  border-left-color: var(--ue);
+}
+
+.einsatzzeile__art {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--ue-hell);
+  color: var(--ue-text);
+  font: 700 14px/1.5 var(--schrift-titel);
 }
 
 .einsatzzeile__kopf {
@@ -1506,6 +1548,10 @@ button {
   color: var(--fw-text);
 }
 
+.kpi--ue .kpi__wert {
+  color: var(--ue-text);
+}
+
 .kpi__label {
   font-size: 14.5px;
   font-weight: 500;
@@ -1570,6 +1616,10 @@ button {
 
 .legende__farbe--fw {
   background: var(--fw);
+}
+
+.legende__farbe--ue {
+  background: var(--ue);
 }
 
 .legende__farbe--rueck,
@@ -1775,6 +1825,10 @@ button {
   background: var(--fw);
 }
 
+.balken__fuell--ue {
+  background: var(--ue);
+}
+
 .balken__wert {
   min-width: 2ch;
   font-size: 14.5px;
@@ -1810,6 +1864,15 @@ button {
 .zeitbalken__teil--wache {
   background: var(--spur);
   box-shadow: inset 0 0 0 1px var(--rand);
+}
+
+.zeitbalken__teil--uebung,
+.legende__farbe--uebung,
+.zeitliste__farbe--uebung {
+  background-color: var(--ue-hell);
+  background-image: radial-gradient(var(--ue) 1.2px, transparent 1.6px);
+  background-size: 5px 5px;
+  box-shadow: inset 0 0 0 1px var(--ue);
 }
 
 .zeitbalken__teil--offen,
@@ -2020,6 +2083,18 @@ button {
   background: var(--fw);
 }
 
+.band__seg--ue {
+  background: var(--ue);
+}
+
+/* Reiner Übungsdienst: die ganze Spur gehört zur Übung. */
+.band__spur--uebung {
+  background-color: var(--ue-hell);
+  background-image: radial-gradient(var(--ue) 1.2px, transparent 1.6px);
+  background-size: 5px 5px;
+  box-shadow: inset 0 0 0 1px var(--ue);
+}
+
 a.band__seg:focus-visible {
   outline-offset: 1px;
   z-index: 2;
@@ -2220,4 +2295,32 @@ a.band__seg:focus-visible {
     border-radius: 16px;
     max-height: 80dvh;
   }
+}
+
+.marke--ue {
+  border-color: var(--ue);
+  background: var(--ue-hell);
+  color: var(--ue-text);
+}
+
+/* Drei Dienstarten nebeneinander, dafür schmaler gesetzt; auf sehr schmalen Handys rutscht der letzte Knopf in eine zweite Zeile. */
+.knopfreihe--dienste {
+  flex-wrap: wrap;
+}
+
+.dienstwahl__neu {
+  gap: 8px;
+}
+
+.dienstwahl__neu > .hinweis {
+  margin: 0;
+}
+
+.knopfreihe--dienste > .knopf {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 6px;
+  padding-right: 6px;
+  font-size: 15.5px;
+  white-space: nowrap;
 }

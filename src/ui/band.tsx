@@ -1,12 +1,14 @@
 import { fmtZeit } from '../domain/time';
 import { bereichVon } from '../domain/types';
-import type { Dienst, Einsatz } from '../domain/types';
+import type { Dienst, Einsatz, Uebung } from '../domain/types';
 
 interface Props {
-  dienst: Pick<Dienst, 'beginn' | 'ende'>;
+  dienst: Pick<Dienst, 'beginn' | 'ende' | 'uebungsdienst'>;
   einsaetze: readonly Einsatz[];
+  /** Übungen im Dienst, als Segmente in der Farbe der Übung. */
+  uebungen?: readonly Uebung[];
   gross?: boolean;
-  /** Einsatzsegmente führen zum Einsatz. */
+  /** Segmente führen zum Einsatz oder zur Übung. */
   verlinkt?: boolean;
   beschriftung?: string;
   /** Aktuelle Zeit; wird als Strich gezeigt, solange der Dienst läuft. */
@@ -34,9 +36,10 @@ function skalenMarken(beginn: number, ende: number): { ms: number; label: string
 const prozent = (v: number) => `${(Math.max(0, Math.min(1, v)) * 100).toFixed(3)}%`;
 
 /**
- * Der Dienst als Zeitband: Einsatz (voll), Rückfahrt (schraffiert, dünner) und Wache (leere Spur).
+ * Der Dienst als Zeitband: Einsatz und Übung (voll), Rückfahrt (schraffiert, dünner) und Wache (leere Spur).
+ * Bei einem reinen Übungsdienst ist die ganze Spur gepunktet.
  */
-export function DienstBand({ dienst, einsaetze, gross, verlinkt, beschriftung, jetzt }: Props) {
+export function DienstBand({ dienst, einsaetze, uebungen = [], gross, verlinkt, beschriftung, jetzt }: Props) {
   const { beginn, ende } = dienst;
   const dauer = ende - beginn;
   const lage = (von: number, bis: number) => {
@@ -47,7 +50,16 @@ export function DienstBand({ dienst, einsaetze, gross, verlinkt, beschriftung, j
 
   return (
     <div className={`band${gross ? ' band--gross' : ''}`} role="group" aria-label={beschriftung ?? 'Dienstverlauf'}>
-      <div className="band__spur">
+      <div className={`band__spur${dienst.uebungsdienst ? ' band__spur--uebung' : ''}`}>
+        {uebungen.map((u) => {
+          const lageU = lage(u.beginn, u.ende);
+          const label = `Übung ${fmtZeit(u.beginn)} bis ${fmtZeit(u.ende)}`;
+          return verlinkt ? (
+            <a key={`u${u.id}`} href={`#/uebung/${u.id}`} className="band__seg band__seg--ue" style={lageU} aria-label={label} />
+          ) : (
+            <span key={`u${u.id}`} className="band__seg band__seg--ue" style={lageU} aria-hidden="true" />
+          );
+        })}
         {einsaetze.map((e) => {
           const bereich = bereichVon(e.typ).toLowerCase();
           const einsatzLage = lage(e.alarm, e.status1);
@@ -83,7 +95,7 @@ export function DienstBand({ dienst, einsaetze, gross, verlinkt, beschriftung, j
   );
 }
 
-export function BandLegende({ jetzt }: { jetzt?: boolean }) {
+export function BandLegende({ jetzt, uebung, uebungsdienst }: { jetzt?: boolean; uebung?: boolean; uebungsdienst?: boolean }) {
   return (
     <ul className="legende" aria-label="Legende des Dienstverlaufs">
       <li>
@@ -92,6 +104,16 @@ export function BandLegende({ jetzt }: { jetzt?: boolean }) {
       <li>
         <span className="legende__farbe legende__farbe--fw" /> Feuerwehr
       </li>
+      {uebung && (
+        <li>
+          <span className="legende__farbe legende__farbe--ue" /> Übung
+        </li>
+      )}
+      {uebungsdienst && (
+        <li>
+          <span className="legende__farbe legende__farbe--uebung" /> Übungsdienst
+        </li>
+      )}
       <li>
         <span className="legende__farbe legende__farbe--rueck" /> Rückfahrt
       </li>

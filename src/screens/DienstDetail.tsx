@@ -1,7 +1,7 @@
 import { dienstSaldo, berechneDienstZeiten } from '../domain/zeiten';
 import { sollText, weichtAb } from '../domain/dienst';
 import { fmtDauer, fmtSaldo, fmtZeit, minutenZwischen } from '../domain/time';
-import { bereichVon } from '../domain/types';
+import { bereichVon, hatPlan, type Einsatz, type Uebung } from '../domain/types';
 import { navigate } from '../router';
 import { katalogName, useDaten } from '../state/daten';
 import { Abschnitt, Knopf, Leer, Meldung } from '../ui/controls';
@@ -11,6 +11,9 @@ import { EinsatzZeile } from '../ui/einsatzzeile';
 import { Icon } from '../ui/icons';
 import { Kpi, KpiRaster } from '../ui/kpi';
 import { Seite } from '../ui/seite';
+import { UebungZeile } from '../ui/uebungzeile';
+
+type Eintrag = { art: 'einsatz'; zeit: number; einsatz: Einsatz } | { art: 'uebung'; zeit: number; uebung: Uebung };
 
 export function DienstDetail({ id }: { id: number }) {
   const daten = useDaten();
@@ -24,17 +27,28 @@ export function DienstDetail({ id }: { id: number }) {
   }
 
   const einsaetze = daten.einsaetzeNachDienst.get(id) ?? [];
-  const z = berechneDienstZeiten(dienst, einsaetze, daten.einst.wachzeitMitDienstRand);
+  const uebungen = daten.uebungenNachDienst.get(id) ?? [];
+  const z = berechneDienstZeiten(dienst, einsaetze, daten.einst.wachzeitMitDienstRand, uebungen);
   const rd = einsaetze.filter((e) => bereichVon(e.typ) === 'RD').length;
   const fw = einsaetze.length - rd;
-  const saldo = dienst.zusatzdienst ? null : dienstSaldo(dienst);
+  const plan = hatPlan(dienst);
+  const uebungsdienst = !!dienst.uebungsdienst;
+  const saldo = plan ? dienstSaldo(dienst) : null;
+  const erfasstMin = uebungen.reduce((s, u) => s + minutenZwischen(u.beginn, u.ende), 0);
+  const eintraege: Eintrag[] = [
+    ...einsaetze.map((e): Eintrag => ({ art: 'einsatz', zeit: e.alarm, einsatz: e })),
+    ...uebungen.map((u): Eintrag => ({ art: 'uebung', zeit: u.beginn, uebung: u })),
+  ].sort((a, b) => a.zeit - b.zeit);
   const anteil = z.dienstMin > 0 ? Math.round((z.einsatzMin / z.dienstMin) * 100) : 0;
+  const uebungAnteil = z.dienstMin > 0 ? Math.round((z.uebungMin / z.dienstMin) * 100) : 0;
   const jetzt = Date.now();
   const laeuft = dienst.beginn <= jetzt && jetzt < dienst.ende;
-  const nachEnde = einsaetze.filter((e) => Math.max(e.status1, e.status2 ?? 0) > dienst.ende).length;
+  const nachEnde =
+    einsaetze.filter((e) => Math.max(e.status1, e.status2 ?? 0) > dienst.ende).length +
+    uebungen.filter((u) => u.ende > dienst.ende).length;
 
   const angaben: [string, string][] = [
-    [dienst.zusatzdienst ? 'Stadt / Organisation' : 'Wache', katalogName(daten, dienst.wacheId)],
+    [uebungsdienst ? 'Ort / Organisation' : dienst.zusatzdienst ? 'Stadt / Organisation' : 'Wache', katalogName(daten, dienst.wacheId)],
     ['Fahrzeug', katalogName(daten, dienst.fahrzeugId)],
     [dienst.zusatzdienst ? 'Funktion' : 'Rolle', katalogName(daten, dienst.rolleId)],
   ];
@@ -50,20 +64,35 @@ export function DienstDetail({ id }: { id: number }) {
         </button>
       }
       fuss={
-        <Knopf variante="primaer" voll onClick={() => navigate(`/einsatz/neu?dienst=${id}`)}>
-          <Icon name="plus" groesse={20} /> Einsatz erfassen
-        </Knopf>
+        <div className="knopfreihe knopfreihe--fuss">
+          {uebungsdienst ? (
+            <>
+              <Knopf onClick={() => navigate(`/einsatz/neu?dienst=${id}`)}>Einsatz</Knopf>
+              <Knopf variante="primaer" onClick={() => navigate(`/uebung/neu?dienst=${id}`)}>
+                <Icon name="plus" groesse={20} /> Übung erfassen
+              </Knopf>
+            </>
+          ) : (
+            <>
+              <Knopf onClick={() => navigate(`/uebung/neu?dienst=${id}`)}>Übung</Knopf>
+              <Knopf variante="primaer" onClick={() => navigate(`/einsatz/neu?dienst=${id}`)}>
+                <Icon name="plus" groesse={20} /> Einsatz erfassen
+              </Knopf>
+            </>
+          )}
+        </div>
       }
     >
       <section className="karte">
         <div className="karte__zeile">
           {dienst.zusatzdienst && <span className="marke">Zusatzdienst</span>}
+          {uebungsdienst && <span className="marke marke--ue">Übungsdienst</span>}
           <span className="zahl karte__gross">
             {fmtZeit(dienst.beginn)}–{fmtZeit(dienst.ende)}
           </span>
           <span className="zahl karte__nebenher">{fmtDauer(minutenZwischen(dienst.beginn, dienst.ende))}</span>
         </div>
-        {!dienst.zusatzdienst && weichtAb(dienst) && (
+        {plan && weichtAb(dienst) && (
           <p className="hinweis zahl">
             Plan {sollText(dienst)}
             {saldo && saldo.saldoMin !== 0 && (
@@ -87,7 +116,7 @@ export function DienstDetail({ id }: { id: number }) {
           </dl>
         )}
         {dienst.notiz && <p className="karte__notiz">{dienst.notiz}</p>}
-        {!dienst.zusatzdienst && (
+        {plan && (
           <Knopf variante="text" onClick={() => navigate(`/dienst/${id}/bearbeiten?zeiten=1`)}>
             {weichtAb(dienst) ? 'Zeiten ändern' : 'Früher abgelöst oder länger geblieben?'}
           </Knopf>
@@ -95,14 +124,32 @@ export function DienstDetail({ id }: { id: number }) {
       </section>
 
       <Abschnitt titel="Verlauf">
-        <DienstBand dienst={dienst} einsaetze={einsaetze} gross verlinkt beschriftung="Verlauf des Dienstes" jetzt={laeuft ? jetzt : undefined} />
-        <BandLegende jetzt={laeuft} />
+        <DienstBand dienst={dienst} einsaetze={einsaetze} uebungen={uebungen} gross verlinkt beschriftung="Verlauf des Dienstes" jetzt={laeuft ? jetzt : undefined} />
+        <BandLegende jetzt={laeuft} uebung={uebungen.length > 0} uebungsdienst={uebungsdienst} />
       </Abschnitt>
 
       <KpiRaster>
-        <Kpi wert={einsaetze.length} label={einsaetze.length === 1 ? 'Einsatz' : 'Einsätze'} zusatz={einsaetze.length > 0 ? `RD ${rd} · FW ${fw}` : undefined} />
-        <Kpi wert={fmtDauer(z.einsatzMin)} label="Im Einsatz" zusatz={`${anteil} % des Dienstes`} />
-        <Kpi wert={fmtDauer(z.wacheMin)} label="Auf Wache" zusatz={z.mitStatus2 < einsaetze.length ? 'unvollständig' : undefined} />
+        {uebungsdienst && (
+          <>
+            <Kpi ton="ue" wert={fmtDauer(z.uebungMin)} label="Übungszeit" zusatz={`${uebungAnteil} % des Dienstes`} />
+            <Kpi
+              ton="ue"
+              wert={uebungen.length}
+              label={uebungen.length === 1 ? 'Übung' : 'Übungen'}
+              zusatz={uebungen.length > 0 ? `davon ${fmtDauer(erfasstMin)} erfasst` : 'noch keine erfasst'}
+            />
+          </>
+        )}
+        {(!uebungsdienst || einsaetze.length > 0) && (
+          <>
+            <Kpi wert={einsaetze.length} label={einsaetze.length === 1 ? 'Einsatz' : 'Einsätze'} zusatz={einsaetze.length > 0 ? `RD ${rd} · FW ${fw}` : undefined} />
+            <Kpi wert={fmtDauer(z.einsatzMin)} label="Im Einsatz" zusatz={`${anteil} % des Dienstes`} />
+          </>
+        )}
+        {!uebungsdienst && <Kpi wert={fmtDauer(z.wacheMin)} label="Auf Wache" zusatz={z.mitStatus2 < einsaetze.length ? 'unvollständig' : undefined} />}
+        {!uebungsdienst && uebungen.length > 0 && (
+          <Kpi ton="ue" wert={fmtDauer(z.uebungMin)} label="Übung" zusatz={`${uebungen.length} ${uebungen.length === 1 ? 'Übung' : 'Übungen'}, nicht auf Wache`} />
+        )}
       </KpiRaster>
 
       {z.ohneStatus2 > 0 && (
@@ -119,25 +166,53 @@ export function DienstDetail({ id }: { id: number }) {
         <Meldung
           art="warnung"
           aktion={
-            !dienst.zusatzdienst ? (
+            plan ? (
               <Knopf variante="text" onClick={() => navigate(`/dienst/${id}/bearbeiten?zeiten=1`)}>
                 Ende anpassen
               </Knopf>
             ) : undefined
           }
         >
-          {nachEnde === 1 ? 'Ein Einsatz endet' : `${nachEnde} Einsätze enden`} nach dem Dienstende.
+          {nachEnde === 1 ? 'Ein Eintrag endet' : `${nachEnde} Einträge enden`} nach dem Dienstende.
         </Meldung>
       )}
 
-      <Abschnitt titel={einsaetze.length > 0 ? `Einsätze (${einsaetze.length})` : 'Einsätze'}>
-        {einsaetze.length === 0 ? (
-          <Leer titel="Noch keine Einsätze" text="Erfasse die Einsätze dieses Dienstes gleich oder später gesammelt." />
+      {uebungsdienst && uebungen.length === 0 && (
+        <Meldung
+          art="info"
+          aktion={
+            <Knopf variante="text" onClick={() => navigate(`/uebung/neu?dienst=${id}`)}>
+              Übung erfassen
+            </Knopf>
+          }
+        >
+          Noch keine Übung erfasst. Die ganze Dienstzeit zählt als Übung, in der Auswertung aber ohne Art.
+        </Meldung>
+      )}
+
+      <Abschnitt
+        titel={
+          eintraege.length > 0
+            ? `${uebungen.length > 0 ? 'Einsätze und Übungen' : 'Einsätze'} (${eintraege.length})`
+            : uebungsdienst
+              ? 'Übungen'
+              : 'Einsätze und Übungen'
+        }
+      >
+        {eintraege.length === 0 ? (
+          <Leer
+            titel={uebungsdienst ? 'Noch keine Übungen' : 'Noch keine Einsätze'}
+            text={
+              uebungsdienst
+                ? 'Erfasse, was ihr in diesem Dienst geübt habt, zum Beispiel Atemschutz oder Reanimation.'
+                : 'Erfasse die Einsätze und Übungen dieses Dienstes gleich oder später gesammelt.'
+            }
+          />
         ) : (
           <div className="liste">
-            {einsaetze.map((e) => (
-              <EinsatzZeile key={e.id} einsatz={e} />
-            ))}
+            {eintraege.map((x) =>
+              x.art === 'einsatz' ? <EinsatzZeile key={`e${x.einsatz.id}`} einsatz={x.einsatz} /> : <UebungZeile key={`u${x.uebung.id}`} uebung={x.uebung} />,
+            )}
           </div>
         )}
       </Abschnitt>

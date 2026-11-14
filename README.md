@@ -4,15 +4,17 @@ Persönliche Einsatzdokumentation für Notfallsanitäter und Feuerwehr: Dienste 
 
 ## Was sie kann
 
-- **Dienste** mit Soll- und Ist-Zeiten (z. B. 07:30–07:30), automatisch berechneten Über- und Minusstunden, Wachen und Zusatzdiensten.
+- **Dienste** mit Soll- und Ist-Zeiten (z. B. 07:30–07:30), automatisch berechneten Über- und Minusstunden und Wachen. Dazu **Zusatzdienste** (anderer Ort, kein Plan) und reine **Übungsdienste** (z. B. Übungsabend oder Lehrgangstag).
 - **Einsätze** in Sekunden erfassen, Details sind optional und auch nach dem Dienst nachtragbar.
   - Alarmstichwort wie in der Praxis: Rettungsdienst `R`/`N` mit Fachrichtung und Kräfteansatz (z. B. R1N1), Feuerwehr `F`/`H`/`ABC` mit Kategorie, MIG und Atemschutz.
   - Zeiten: Alarm, Status 1, Status 2. Daraus folgen Einsatzdauer, Rückfahrt und Wachzeit.
   - **Ergebnis** (Transport, ambulant versorgt, lehnt ab, verstorben, nur Transport, Hilfeleistung, Fehleinsatz), **NACA**, **Verdachtsdiagnose** und der **Verdacht laut Leitstelle**.
   - **Alarmierung bewerten**: passend, zu hoch oder zu niedrig – mit automatischem Vorschlag aus NACA und Ergebnis.
   - **Maßnahmen und Medikamente** nach dem Gemeinsamen Kompendium Rettungsdienst 2026, getrennt nach Vorabdelegation, eigenverantwortlich und auf Anordnung.
-- **Statistik**: Einsätze je Monat, Wochentag und Tageszeit, häufigste Stichworte, Dienstzeit-Aufteilung, Über-/Minusstunden, Maßnahmen-Nachweis, Schweregrad (NACA), Übertriage und Abweichungen zwischen Leitstelle und Befund.
-- **Sicherung** als Datei, **CSV-Export** für Excel, Hell- und Dunkelmodus.
+  - **Maßnahmen auf Befehl** im Feuerwehreinsatz (z. B. Löschangriff, Türöffnung, Messen) aus einer eigenen, wachsenden Liste in fünf Gruppen.
+- **Übungen** als eigene Einsatzart neben Rettungsdienst und Feuerwehr: Art, Thema, Beginn und Ende. Sie zählen nicht als Einsatz und haben eine eigene Auswertung. Die Übungszeit in der Schicht wird aus der Wachzeit herausgerechnet, in einem Übungsdienst zählt die ganze Dienstzeit als Übung.
+- **Statistik**: Einsätze je Monat, Wochentag und Tageszeit, häufigste Stichworte, Dienstzeit-Aufteilung, Über-/Minusstunden, Maßnahmen-Nachweis (Rettungsdienst) und Maßnahmen auf Befehl (Feuerwehr), Übungszeit nach Art, Schweregrad (NACA), Übertriage und Abweichungen zwischen Leitstelle und Befund.
+- **Sicherung** als Datei, **CSV-Export** für Excel (Einsätze, Dienste, Übungen), Hell- und Dunkelmodus.
 
 ## Datenschutz
 

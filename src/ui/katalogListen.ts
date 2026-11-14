@@ -18,10 +18,10 @@ export function useKatalogListe(
   typ: KatalogTyp,
   optionen: { bereich?: Bereich; filter?: (k: KatalogEintrag) => boolean } = {},
 ): KatalogListe {
-  const { katalog, dienste, einsaetze } = useDaten();
+  const { katalog, dienste, einsaetze, uebungen } = useDaten();
   const { bereich, filter } = optionen;
   return useMemo(() => {
-    const zaehler = nutzung(typ, dienste, einsaetze);
+    const zaehler = nutzung(typ, dienste, einsaetze, uebungen);
     const aktive = sortiereNachNutzung(
       katalog.filter((k) => k.typ === typ && k.aktiv && (!filter || filter(k))),
       zaehler,
@@ -33,7 +33,7 @@ export function useKatalogListe(
       zaehler,
       namen: new Map(katalog.map((k) => [k.id!, k.name])),
     };
-  }, [katalog, dienste, einsaetze, typ, bereich, filter]);
+  }, [katalog, dienste, einsaetze, uebungen, typ, bereich, filter]);
 }
 
 /** Entfernt Schlüssel mit dem Wert undefined, damit nichts Leeres gespeichert wird. */

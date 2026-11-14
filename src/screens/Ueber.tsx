@@ -25,8 +25,15 @@ export function Ueber() {
           <li><strong>Wachzeit:</strong> Status 2 bis zur nächsten Alarmierung, auf Wunsch auch Dienstanfang und -ende.</li>
           <li><strong>Überstunden:</strong> Dienstantritt vor dem geplanten Beginn plus Dienstende nach dem geplanten Ende.</li>
           <li><strong>Minusstunden:</strong> später angetreten oder früher abgelöst.</li>
-          <li>Zusatzdienste haben keinen Plan und zählen nicht zu Über- und Minusstunden.</li>
+          <li>Zusatzdienste und Übungsdienste haben keinen Plan und zählen nicht zu Über- und Minusstunden.</li>
+          <li><strong>Übung:</strong> eine Einsatzart neben Rettungsdienst und Feuerwehr, die nicht als Einsatz zählt. Die Zeit, in der du auf Wache übst, zählt nicht zur Wachzeit. In einem Übungsdienst zählt die ganze Zeit als Übung.</li>
         </ul>
+      </Abschnitt>
+
+      <Abschnitt titel="Maßnahmen auf Befehl">
+        <p className="text">
+          Im Feuerwehreinsatz erfasst du die Maßnahmen, die du auf Befehl des Einsatzleiters oder Gruppenführers ausgeführt hast, zum Beispiel Löschangriff oder Türöffnung. Dafür gibt es eine eigene Liste, die mit deinen Einsätzen wächst.
+        </p>
       </Abschnitt>
 
       <Abschnitt titel="Maßnahmen und Rechtsgrundlage">

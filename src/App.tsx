@@ -10,6 +10,7 @@ import { KatalogListeScreen, KatalogUebersicht } from './screens/Kataloge';
 import { Mehr } from './screens/Mehr';
 import { Start } from './screens/Start';
 import { Statistik } from './screens/Statistik';
+import { UebungForm } from './screens/UebungForm';
 import { Ueber } from './screens/Ueber';
 import { DatenProvider, useDaten } from './state/daten';
 import { navigate, tabVon, useRoute, type Route } from './router';
@@ -28,7 +29,7 @@ const TABS: { id: ReturnType<typeof tabVon>; label: string; pfad: string; icon: 
 ];
 
 /** Auf diesen Seiten steht unten eine Leiste mit der Hauptaktion statt der Reiter. */
-const OHNE_REITER: ReadonlySet<Route['name']> = new Set(['dienstNeu', 'dienstBearbeiten', 'dienst', 'einsatzNeu', 'einsatz']);
+const OHNE_REITER: ReadonlySet<Route['name']> = new Set(['dienstNeu', 'dienstBearbeiten', 'dienst', 'einsatzNeu', 'einsatz', 'uebungNeu', 'uebung']);
 const WURZELN: ReadonlySet<Route['name']> = new Set(['start', 'einsaetze', 'statistik', 'mehr']);
 
 // Die Listen springen beim Zurückgehen an die alte Stelle; alles andere beginnt oben.
@@ -47,15 +48,19 @@ function Bildschirm({ route }: { route: Route }) {
     case 'start':
       return <Start />;
     case 'dienstNeu':
-      return <DienstForm zusatz={route.zusatz} />;
+      return <DienstForm zusatz={route.zusatz} uebung={route.uebung} />;
     case 'dienstBearbeiten':
       return <DienstForm id={route.id} zeitenOffen={route.zeiten} />;
     case 'dienst':
       return <DienstDetail id={route.id} />;
     case 'einsatzNeu':
-      return <EinsatzForm dienstId={route.dienstId} />;
+      return <EinsatzForm dienstId={route.dienstId} typ={route.typ} />;
     case 'einsatz':
       return <EinsatzForm id={route.id} />;
+    case 'uebungNeu':
+      return <UebungForm dienstId={route.dienstId} />;
+    case 'uebung':
+      return <UebungForm id={route.id} />;
     case 'einsaetze':
       return <Einsaetze />;
     case 'statistik':

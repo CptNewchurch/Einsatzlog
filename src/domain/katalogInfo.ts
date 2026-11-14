@@ -12,11 +12,13 @@ export const KATALOG_REIHENFOLGE: KatalogTyp[] = [
   'kategorie',
   'diagnose',
   'massnahme',
+  'fwmassnahme',
   'ressource',
   'fahrzeug',
   'rolle',
   'wache',
   'standort',
+  'uebungsart',
   'tag',
 ];
 
@@ -32,9 +34,14 @@ export const KATALOG_INFO: Record<KatalogTyp, KatalogInfo> = {
     hinweis: 'Für „Verdachtsdiagnose“ und „Laut Leitstelle“ im Einsatz. Die Liste wächst beim Erfassen mit.',
   },
   massnahme: {
-    titel: 'Maßnahmen und Medikamente',
+    titel: 'Maßnahmen Rettungsdienst',
     neu: 'Neue Maßnahme',
-    hinweis: 'Vorbelegt nach dem Kompendium. Eigene Einträge kannst du ergänzen.',
+    hinweis: 'Maßnahmen und Medikamente im Rettungsdienst, vorbelegt nach dem Kompendium. Eigene Einträge kannst du ergänzen.',
+  },
+  fwmassnahme: {
+    titel: 'Maßnahmen Feuerwehr',
+    neu: 'Neue Maßnahme',
+    hinweis: 'Was du im Feuerwehreinsatz auf Befehl ausführst, z. B. Löschangriff oder Türöffnung. Die Liste wächst beim Erfassen mit.',
   },
   ressource: {
     titel: 'Nachforderungen',
@@ -57,9 +64,14 @@ export const KATALOG_INFO: Record<KatalogTyp, KatalogInfo> = {
     hinweis: 'Die Wachen für deine Regeldienste.',
   },
   standort: {
-    titel: 'Standorte für Zusatzdienste',
+    titel: 'Standorte für Zusatz- und Übungsdienste',
     neu: 'Neuer Standort',
-    hinweis: 'Stadt oder Organisation, in der du einen Zusatzdienst leistest.',
+    hinweis: 'Stadt, Organisation oder Ausbildungsstätte, in der du einen Zusatz- oder Übungsdienst leistest.',
+  },
+  uebungsart: {
+    titel: 'Übungsarten',
+    neu: 'Neue Übungsart',
+    hinweis: 'Für die Erfassung von Übungen, z. B. Atemschutz oder Reanimation. Die Liste wächst beim Erfassen mit.',
   },
   tag: {
     titel: 'Tags',

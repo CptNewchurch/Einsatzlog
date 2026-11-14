@@ -1,8 +1,19 @@
 import { berechneDienstZeiten, dienstSaldo } from '../domain/zeiten';
-import { stichwortText } from '../domain/stichwort';
+import { BEREICH_NAME, stichwortText } from '../domain/stichwort';
 import { fmtDatum, fmtZeit, MIN } from '../domain/time';
 import { NACA_GRUPPE_INFO, NACA_INFO, bewertungVon, nacaGruppe } from '../domain/triage';
-import { AUSGANG_INFO, BEWERTUNG_INFO, DURCHFUEHRUNG_INFO, type Dienst, type Einsatz, type KatalogEintrag } from '../domain/types';
+import {
+  AUSGANG_INFO,
+  BEWERTUNG_INFO,
+  DIENSTART_NAME,
+  DURCHFUEHRUNG_INFO,
+  dienstartVon,
+  hatPlan,
+  type Dienst,
+  type Einsatz,
+  type KatalogEintrag,
+  type Uebung,
+} from '../domain/types';
 
 // CSV für Excel und LibreOffice: Semikolon, UTF-8 mit Kennzeichen, deutsche Datumsangaben.
 
@@ -55,7 +66,7 @@ export function erzeugeEinsaetzeCsv(
         e.mig ? true : '',
         e.kraefteRtw != null && e.kraefteNef != null ? `R${e.kraefteRtw}N${e.kraefteNef}` : '',
         d ? fmtDatum(d.beginn) : '',
-        d ? (d.zusatzdienst ? 'Zusatzdienst' : 'Regeldienst') : '',
+        d ? DIENSTART_NAME[dienstartVon(d)] : '',
         d ? name(d.wacheId) : '',
         name(e.fahrzeugId),
         name(e.rolleId),
@@ -88,42 +99,79 @@ export function erzeugeDiensteCsv(
   einsaetze: readonly Einsatz[],
   katalog: ReadonlyMap<number, KatalogEintrag>,
   randZaehltAlsWache: boolean,
+  uebungen: readonly Uebung[] = [],
 ): string {
   const name = (id: number | undefined) => (id == null ? '' : (katalog.get(id)?.name ?? ''));
   const proDienst = new Map<number, Einsatz[]>();
   einsaetze.forEach((e) => proDienst.set(e.dienstId, [...(proDienst.get(e.dienstId) ?? []), e]));
+  const uebungenProDienst = new Map<number, Uebung[]>();
+  uebungen.forEach((u) => uebungenProDienst.set(u.dienstId, [...(uebungenProDienst.get(u.dienstId) ?? []), u]));
   const kopf = [
     'Datum', 'Dienstart', 'Wache / Standort', 'Fahrzeug', 'Rolle',
     'Geplanter Beginn', 'Geplantes Ende', 'Dienstantritt', 'Dienstende',
-    'Über-/Minusstunden (min)', 'Einsätze', 'Im Einsatz (min)', 'Rückfahrt (min)', 'Auf Wache (min)', 'Notiz',
+    'Über-/Minusstunden (min)', 'Einsätze', 'Im Einsatz (min)', 'Rückfahrt (min)', 'Auf Wache (min)',
+    'Übungen', 'Übung (min)', 'Notiz',
   ];
   const zeilen = [...dienste]
     .sort((a, b) => a.beginn - b.beginn)
     .map((d): Zelle[] => {
-      const z = berechneDienstZeiten(d, proDienst.get(d.id!) ?? [], randZaehltAlsWache);
+      const uebungenDesDienstes = uebungenProDienst.get(d.id!) ?? [];
+      const z = berechneDienstZeiten(d, proDienst.get(d.id!) ?? [], randZaehltAlsWache, uebungenDesDienstes);
       const hm = (ms: number) => `${fmtDatum(ms)} ${fmtZeit(ms)}`;
       return [
         fmtDatum(d.beginn),
-        d.zusatzdienst ? 'Zusatzdienst' : 'Regeldienst',
+        DIENSTART_NAME[dienstartVon(d)],
         name(d.wacheId),
         name(d.fahrzeugId),
         name(d.rolleId),
-        d.zusatzdienst ? '' : hm(d.sollBeginn),
-        d.zusatzdienst ? '' : hm(d.sollEnde),
+        hatPlan(d) ? hm(d.sollBeginn) : '',
+        hatPlan(d) ? hm(d.sollEnde) : '',
         hm(d.beginn),
         hm(d.ende),
-        d.zusatzdienst ? '' : dienstSaldo(d).saldoMin,
+        hatPlan(d) ? dienstSaldo(d).saldoMin : '',
         z.einsaetze,
         z.einsatzMin,
         z.rueckfahrtMin,
         z.wacheMin,
+        uebungenDesDienstes.length || '',
+        z.uebungMin > 0 ? z.uebungMin : '',
         d.notiz ?? '',
       ];
     });
   return csvText(kopf, zeilen);
 }
 
-export function csvDateiname(art: 'einsaetze' | 'dienste', ms: number): string {
+export function erzeugeUebungenCsv(
+  dienste: readonly Dienst[],
+  uebungen: readonly Uebung[],
+  katalog: ReadonlyMap<number, KatalogEintrag>,
+): string {
+  const name = (id: number | undefined) => (id == null ? '' : (katalog.get(id)?.name ?? ''));
+  const dienstMap = new Map(dienste.map((d) => [d.id!, d]));
+  const kopf = ['Datum', 'Beginn', 'Ende', 'Dauer (min)', 'Art', 'Bereich', 'Thema', 'Dienst', 'Dienstart', 'Wache / Standort', 'Notiz'];
+  const zeilen = [...uebungen]
+    .sort((a, b) => a.beginn - b.beginn)
+    .map((u): Zelle[] => {
+      const d = dienstMap.get(u.dienstId);
+      const bereich = katalog.get(u.artId)?.bereich;
+      return [
+        fmtDatum(u.beginn),
+        fmtZeit(u.beginn),
+        fmtZeit(u.ende),
+        minuten(u.beginn, u.ende),
+        name(u.artId),
+        bereich ? BEREICH_NAME[bereich] : '',
+        u.thema ?? '',
+        d ? fmtDatum(d.beginn) : '',
+        d ? DIENSTART_NAME[dienstartVon(d)] : '',
+        d ? name(d.wacheId) : '',
+        u.notiz ?? '',
+      ];
+    });
+  return csvText(kopf, zeilen);
+}
+
+export function csvDateiname(art: 'einsaetze' | 'dienste' | 'uebungen', ms: number): string {
   const d = new Date(ms);
   const p = (n: number) => String(n).padStart(2, '0');
   return `einsatzlog-${art}-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.csv`;

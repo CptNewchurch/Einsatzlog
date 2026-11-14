@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import type { KatalogTyp } from './domain/types';
+import { TYPEN, type KatalogTyp, type Typ } from './domain/types';
 
 export type Route =
   | { name: 'start' }
-  | { name: 'dienstNeu'; zusatz?: boolean }
+  | { name: 'dienstNeu'; zusatz?: boolean; uebung?: boolean }
   | { name: 'dienstBearbeiten'; id: number; zeiten?: boolean }
   | { name: 'dienst'; id: number }
-  | { name: 'einsatzNeu'; dienstId?: number }
+  | { name: 'einsatzNeu'; dienstId?: number; typ?: Typ }
   | { name: 'einsatz'; id: number }
+  | { name: 'uebungNeu'; dienstId?: number }
+  | { name: 'uebung'; id: number }
   | { name: 'einsaetze' }
   | { name: 'statistik' }
   | { name: 'mehr' }
@@ -22,11 +24,13 @@ export const KATALOG_SLUGS: Record<string, KatalogTyp> = {
   stichworte: 'kategorie',
   diagnosen: 'diagnose',
   massnahmen: 'massnahme',
+  'fw-massnahmen': 'fwmassnahme',
   ressourcen: 'ressource',
   fahrzeuge: 'fahrzeug',
   rollen: 'rolle',
   wachen: 'wache',
   standorte: 'standort',
+  uebungsarten: 'uebungsart',
   tags: 'tag',
 };
 
@@ -50,6 +54,7 @@ export function parseRoute(hash: string): Route {
     case 'dienst': {
       if (b === 'neu' && teile.length === 2) return { name: 'dienstNeu' };
       if (b === 'neu' && c === 'zusatz' && teile.length === 3) return { name: 'dienstNeu', zusatz: true };
+      if (b === 'neu' && c === 'uebung' && teile.length === 3) return { name: 'dienstNeu', uebung: true };
       const id = zahl(b);
       if (id == null) break;
       if (teile.length === 2) return { name: 'dienst', id };
@@ -61,10 +66,21 @@ export function parseRoute(hash: string): Route {
     case 'einsatz': {
       if (b === 'neu' && teile.length === 2) {
         const d = zahl(params.get('dienst') ?? undefined);
-        return d == null ? { name: 'einsatzNeu' } : { name: 'einsatzNeu', dienstId: d };
+        const t = params.get('typ');
+        const typ = TYPEN.find((x) => x === t);
+        return { name: 'einsatzNeu', ...(d != null ? { dienstId: d } : {}), ...(typ ? { typ } : {}) };
       }
       const id = zahl(b);
       if (id != null && teile.length === 2) return { name: 'einsatz', id };
+      break;
+    }
+    case 'uebung': {
+      if (b === 'neu' && teile.length === 2) {
+        const d = zahl(params.get('dienst') ?? undefined);
+        return d == null ? { name: 'uebungNeu' } : { name: 'uebungNeu', dienstId: d };
+      }
+      const id = zahl(b);
+      if (id != null && teile.length === 2) return { name: 'uebung', id };
       break;
     }
     case 'einsaetze':
@@ -117,6 +133,8 @@ export function tabVon(r: Route): 'dienste' | 'einsaetze' | 'statistik' | 'mehr'
     case 'einsaetze':
     case 'einsatz':
     case 'einsatzNeu':
+    case 'uebung':
+    case 'uebungNeu':
       return 'einsaetze';
     case 'statistik':
       return 'statistik';

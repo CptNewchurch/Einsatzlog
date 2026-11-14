@@ -5,7 +5,7 @@ interface Props {
   label: string;
   /** Kleine Zeile unter dem Label, z. B. „RD 12 · FW 5“. */
   zusatz?: ReactNode;
-  ton?: 'rd' | 'fw' | 'neutral';
+  ton?: 'rd' | 'fw' | 'ue' | 'neutral';
 }
 
 export function Kpi({ wert, label, zusatz, ton = 'neutral' }: Props) {

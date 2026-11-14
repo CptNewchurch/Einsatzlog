@@ -1,12 +1,18 @@
 import {
   bereichVon,
+  FW_GRUPPEN,
   TYPEN,
+  dienstartVon,
+  hatPlan,
   type Bereich,
   type Dienst,
+  type Dienstart,
   type Einsatz,
+  type FwGruppe,
   type KatalogEintrag,
   type MassnahmeArt,
   type Typ,
+  type Uebung,
 } from './types';
 import { berechneDienstZeiten, dienstSaldo } from './zeiten';
 
@@ -17,8 +23,8 @@ export interface StatFilter {
   /** Kalenderjahr oder null für alle Jahre. */
   jahr: number | null;
   bereich: Bereich | 'alle';
-  /** Regeldienste, Zusatzdienste oder alle. */
-  dienstart: 'alle' | 'regel' | 'zusatz';
+  /** Regeldienste, Zusatzdienste, Übungsdienste oder alle. */
+  dienstart: 'alle' | Dienstart;
 }
 
 export interface BereichsWert {
@@ -32,6 +38,8 @@ export interface Zeitsummen {
   einsatzMin: number;
   rueckfahrtMin: number;
   wacheMin: number;
+  /** Übungen in der Schicht, soweit sie in die Wachzeit fielen. */
+  uebungMin: number;
   ohneStatus2: number;
   ueberlappungen: number;
 }
@@ -96,10 +104,15 @@ export function median(werte: readonly number[]): number | null {
 }
 
 /** Jahre mit Daten, neueste zuerst. */
-export function verfuegbareJahre(dienste: readonly Dienst[], einsaetze: readonly Einsatz[]): number[] {
+export function verfuegbareJahre(
+  dienste: readonly Dienst[],
+  einsaetze: readonly Einsatz[],
+  uebungen: readonly Pick<Uebung, 'beginn'>[] = [],
+): number[] {
   const jahre = new Set<number>();
   dienste.forEach((d) => jahre.add(new Date(d.beginn).getFullYear()));
   einsaetze.forEach((e) => jahre.add(new Date(e.alarm).getFullYear()));
+  uebungen.forEach((u) => jahre.add(new Date(u.beginn).getFullYear()));
   return [...jahre].sort((a, b) => b - a);
 }
 
@@ -114,8 +127,7 @@ export function einsatzMinuten(e: Pick<Einsatz, 'alarm' | 'status1'>): number {
   return (e.status1 - e.alarm) / 60_000;
 }
 
-const dienstPasst = (d: Dienst, filter: StatFilter) =>
-  filter.dienstart === 'alle' || (filter.dienstart === 'zusatz') === !!d.zusatzdienst;
+export const dienstPasst = (d: Dienst, filter: StatFilter) => filter.dienstart === 'alle' || filter.dienstart === dienstartVon(d);
 
 /** Die Einsätze, die zu Jahr, Bereich und Dienstart des Filters passen. */
 export function waehleEinsaetze(
@@ -137,6 +149,7 @@ export function berechneStatistik(
   alleEinsaetze: readonly Einsatz[],
   filter: StatFilter,
   randZaehltAlsWache: boolean,
+  alleUebungen: readonly Uebung[] = [],
 ): Statistik {
   const imJahr = (ms: number) => filter.jahr == null || new Date(ms).getFullYear() === filter.jahr;
 
@@ -150,20 +163,28 @@ export function berechneStatistik(
     if (l) l.push(e);
     else proDienst.set(e.dienstId, [e]);
   });
+  const uebungenProDienst = new Map<number, Uebung[]>();
+  alleUebungen.forEach((u) => {
+    const l = uebungenProDienst.get(u.dienstId);
+    if (l) l.push(u);
+    else uebungenProDienst.set(u.dienstId, [u]);
+  });
   const zeiten: Zeitsummen = {
     dienstMin: 0,
     einsatzMin: 0,
     rueckfahrtMin: 0,
     wacheMin: 0,
+    uebungMin: 0,
     ohneStatus2: 0,
     ueberlappungen: 0,
   };
   dienste.forEach((d) => {
-    const z = berechneDienstZeiten(d, proDienst.get(d.id!) ?? [], randZaehltAlsWache);
+    const z = berechneDienstZeiten(d, proDienst.get(d.id!) ?? [], randZaehltAlsWache, uebungenProDienst.get(d.id!) ?? []);
     zeiten.dienstMin += z.dienstMin;
     zeiten.einsatzMin += z.einsatzMin;
     zeiten.rueckfahrtMin += z.rueckfahrtMin;
     zeiten.wacheMin += z.wacheMin;
+    zeiten.uebungMin += z.uebungMin;
     zeiten.ohneStatus2 += z.ohneStatus2;
     zeiten.ueberlappungen += z.ueberlappungen;
   });
@@ -189,8 +210,8 @@ export function berechneStatistik(
     diensteMitMinus: 0,
     verlauf: verlauf.map((v) => ({ label: v.label, min: 0 })),
   };
-  // Über- und Minusstunden gibt es nur im Regeldienst; ein Zusatzdienst hat keinen Plan.
-  dienste.filter((d) => !d.zusatzdienst).forEach((d) => {
+  // Über- und Minusstunden gibt es nur im Regeldienst; Zusatz- und Übungsdienste haben keinen Plan.
+  dienste.filter(hatPlan).forEach((d) => {
     const { saldoMin } = dienstSaldo(d);
     ueberstunden.saldoMin += saldoMin;
     if (saldoMin > 0) {
@@ -309,7 +330,10 @@ export interface MassnahmenStatistik {
   summe: { anzahl: number; vorab: number; eigen: number; arzt: number; einsaetze: number };
 }
 
-/** Nachweis der Maßnahmen und Medikamente, getrennt nach Vorabdelegation, eigenverantwortlich und auf Anordnung. */
+/**
+ * Nachweis der Maßnahmen und Medikamente im Rettungsdienst, getrennt nach Vorabdelegation,
+ * eigenverantwortlich und auf Anordnung. Feuerwehr-Maßnahmen (auf Befehl) zählen hier nicht mit.
+ */
 export function berechneMassnahmen(
   einsaetze: readonly Einsatz[],
   katalog: ReadonlyMap<number, KatalogEintrag>,
@@ -317,7 +341,7 @@ export function berechneMassnahmen(
   const zeilen = new Map<number, MassnahmenZeile>();
   const summe = { anzahl: 0, vorab: 0, eigen: 0, arzt: 0, einsaetze: 0 };
   einsaetze.forEach((e) => {
-    const liste = e.massnahmen ?? [];
+    const liste = (e.massnahmen ?? []).filter((m) => katalog.get(m.massnahmeId)?.typ !== 'fwmassnahme');
     if (liste.length > 0) summe.einsaetze += 1;
     liste.forEach((m) => {
       const k = katalog.get(m.massnahmeId);
@@ -355,4 +379,61 @@ export function berechneMassnahmen(
     zeilen: [...zeilen.values()].sort((a, b) => b.anzahl - a.anzahl || a.name.localeCompare(b.name, 'de')),
     summe,
   };
+}
+
+/* ---------- Feuerwehr-Maßnahmen (auf Befehl) ---------- */
+
+export interface FwMassnahmenZeile {
+  massnahmeId: number;
+  name: string;
+  /** Wie oft ausgeführt (Summe der Anzahl). */
+  anzahl: number;
+  /** In wie vielen Einsätzen. */
+  einsaetze: number;
+}
+
+export interface FwMassnahmenGruppe {
+  gruppe: FwGruppe;
+  anzahl: number;
+  zeilen: FwMassnahmenZeile[];
+}
+
+export interface FwMassnahmenStatistik {
+  gruppen: FwMassnahmenGruppe[];
+  summe: { anzahl: number; einsaetze: number; verschiedene: number };
+}
+
+/** Nachweis der Maßnahmen im Feuerwehreinsatz, nach Gruppen. Alle werden auf Befehl ausgeführt. */
+export function berechneFwMassnahmen(
+  einsaetze: readonly Einsatz[],
+  katalog: ReadonlyMap<number, KatalogEintrag>,
+): FwMassnahmenStatistik {
+  const zeilen = new Map<number, FwMassnahmenZeile & { gruppe: FwGruppe }>();
+  let anzahl = 0;
+  let mitMassnahmen = 0;
+  einsaetze.forEach((e) => {
+    const liste = (e.massnahmen ?? []).filter((m) => katalog.get(m.massnahmeId)?.typ === 'fwmassnahme');
+    if (liste.length > 0) mitMassnahmen += 1;
+    liste.forEach((m) => {
+      const k = katalog.get(m.massnahmeId);
+      let z = zeilen.get(m.massnahmeId);
+      if (!z) {
+        z = { massnahmeId: m.massnahmeId, name: k?.name ?? '?', gruppe: k?.gruppe ?? 'sonstige', anzahl: 0, einsaetze: 0 };
+        zeilen.set(m.massnahmeId, z);
+      }
+      z.anzahl += m.anzahl;
+      z.einsaetze += 1;
+      anzahl += m.anzahl;
+    });
+  });
+  const gruppen = FW_GRUPPEN.map((gruppe): FwMassnahmenGruppe => {
+    const liste = [...zeilen.values()]
+      .filter((z) => z.gruppe === gruppe)
+      .map(({ gruppe: _g, ...rest }) => rest)
+      .sort((a, b) => b.anzahl - a.anzahl || a.name.localeCompare(b.name, 'de'));
+    return { gruppe, anzahl: liste.reduce((s, z) => s + z.anzahl, 0), zeilen: liste };
+  })
+    .filter((g) => g.zeilen.length > 0)
+    .sort((a, b) => b.anzahl - a.anzahl);
+  return { gruppen, summe: { anzahl, einsaetze: mitMassnahmen, verschiedene: zeilen.size } };
 }

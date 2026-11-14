@@ -1,39 +1,61 @@
 import { db } from './db';
 import { mergeEinstellungen, speichereEinstellungen, spiegleTheme } from './einstellungen';
-import { SEED_VERSION } from './seed';
-import { TYPEN, type Dienst, type Einsatz, type Einstellungen, type KatalogEintrag } from '../domain/types';
+import { sorgeFuerStartlisten } from './seed';
+import { TYPEN, type Dienst, type Einsatz, type Einstellungen, type KatalogEintrag, type Uebung } from '../domain/types';
 
 export const BACKUP_APP = 'einsatzlog';
-export const BACKUP_VERSION = 1;
+/** 2 = mit Übungen und Feuerwehr-Maßnahmen. Sicherungen der Version 1 lassen sich weiterhin einspielen. */
+export const BACKUP_VERSION = 2;
+
+/** Stand der Startlisten in Sicherungen der Version 1 (App 1.0.0). */
+const SEED_STAND_VERSION_1 = 2;
 
 export interface BackupDatei {
   app: typeof BACKUP_APP;
   version: number;
   exportiertAm: number;
+  /** Stand der Startlisten beim Sichern; fehlende Listen werden nach dem Einspielen ergänzt. */
+  seedVersion?: number;
   daten: {
     dienste: Dienst[];
     einsaetze: Einsatz[];
     katalog: KatalogEintrag[];
+    uebungen: Uebung[];
     einstellungen: Einstellungen;
   };
 }
 
 export class BackupFehler extends Error {}
 
-const KATALOG_TYPEN = ['kategorie', 'rolle', 'fahrzeug', 'wache', 'standort', 'massnahme', 'diagnose', 'ressource', 'tag'];
+const KATALOG_TYPEN = [
+  'kategorie',
+  'rolle',
+  'fahrzeug',
+  'wache',
+  'standort',
+  'massnahme',
+  'fwmassnahme',
+  'diagnose',
+  'ressource',
+  'tag',
+  'uebungsart',
+];
 
 export async function erzeugeBackup(jetzt = Date.now()): Promise<BackupDatei> {
-  const [dienste, einsaetze, katalog, einst] = await Promise.all([
+  const [dienste, einsaetze, katalog, uebungen, einst, seed] = await Promise.all([
     db.dienste.orderBy('beginn').toArray(),
     db.einsaetze.orderBy('alarm').toArray(),
     db.katalog.toArray(),
+    db.uebungen.orderBy('beginn').toArray(),
     db.meta.get('einstellungen'),
+    db.meta.get('seedVersion'),
   ]);
   return {
     app: BACKUP_APP,
     version: BACKUP_VERSION,
     exportiertAm: jetzt,
-    daten: { dienste, einsaetze, katalog, einstellungen: mergeEinstellungen(einst?.value) },
+    seedVersion: Number(seed?.value ?? 0),
+    daten: { dienste, einsaetze, katalog, uebungen, einstellungen: mergeEinstellungen(einst?.value) },
   };
 }
 
@@ -109,14 +131,39 @@ export function pruefeBackup(roh: unknown): BackupDatei {
     }
   });
 
+  // Sicherungen der Version 1 kennen keine Übungen.
+  const rohUebungen = daten.uebungen ?? [];
+  if (!Array.isArray(rohUebungen)) throw new BackupFehler('Die Sicherung ist unvollständig.');
+  rohUebungen.forEach((u, i) => {
+    if (
+      !istObjekt(u) ||
+      !istZahl(u.id) ||
+      !istZahl(u.artId) ||
+      !istZahl(u.dienstId) ||
+      !istZahl(u.beginn) ||
+      !istZahl(u.ende) ||
+      u.ende <= u.beginn
+    ) {
+      throw new BackupFehler(`Übung Nr. ${i + 1} in der Sicherung ist ungültig.`);
+    }
+    if (!dienstIds.has(u.dienstId)) {
+      throw new BackupFehler(`Übung Nr. ${i + 1} gehört zu einem Dienst, der in der Sicherung fehlt.`);
+    }
+    if (!katalogIds.has(u.artId)) {
+      throw new BackupFehler(`Übung Nr. ${i + 1} verweist auf eine Übungsart, die in der Sicherung fehlt.`);
+    }
+  });
+
   return {
     app: BACKUP_APP,
     version: roh.version,
     exportiertAm: istZahl(roh.exportiertAm) ? roh.exportiertAm : Date.now(),
+    seedVersion: istZahl(roh.seedVersion) ? roh.seedVersion : SEED_STAND_VERSION_1,
     daten: {
       dienste,
       einsaetze: daten.einsaetze as unknown as Einsatz[],
       katalog: daten.katalog as unknown as KatalogEintrag[],
+      uebungen: rohUebungen as unknown as Uebung[],
       einstellungen: mergeEinstellungen(daten.einstellungen),
     },
   };
@@ -133,20 +180,25 @@ export function leseBackupText(text: string): BackupDatei {
 }
 
 /** Ersetzt alle Daten durch den Inhalt der Sicherung – ganz oder gar nicht. */
-export async function stelleWiederHer(datei: BackupDatei): Promise<{ dienste: number; einsaetze: number; katalog: number }> {
-  const { dienste, einsaetze, katalog, einstellungen } = datei.daten;
-  await db.transaction('rw', db.dienste, db.einsaetze, db.katalog, db.meta, async () => {
-    await Promise.all([db.dienste.clear(), db.einsaetze.clear(), db.katalog.clear(), db.meta.clear()]);
+export async function stelleWiederHer(
+  datei: BackupDatei,
+): Promise<{ dienste: number; einsaetze: number; uebungen: number; katalog: number }> {
+  const { dienste, einsaetze, katalog, uebungen, einstellungen } = datei.daten;
+  await db.transaction('rw', db.dienste, db.einsaetze, db.uebungen, db.katalog, db.meta, async () => {
+    await Promise.all([db.dienste.clear(), db.einsaetze.clear(), db.uebungen.clear(), db.katalog.clear(), db.meta.clear()]);
     await db.dienste.bulkAdd(dienste);
     await db.einsaetze.bulkAdd(einsaetze);
+    await db.uebungen.bulkAdd(uebungen);
     await db.katalog.bulkAdd(katalog);
     await db.meta.bulkPut([
       { key: 'einstellungen', value: einstellungen },
-      { key: 'seedVersion', value: SEED_VERSION },
+      { key: 'seedVersion', value: datei.seedVersion ?? SEED_STAND_VERSION_1 },
     ]);
   });
+  // Eine ältere Sicherung kennt neuere Startlisten noch nicht; sie werden jetzt ergänzt.
+  await sorgeFuerStartlisten();
   spiegleTheme(einstellungen.theme);
-  return { dienste: dienste.length, einsaetze: einsaetze.length, katalog: katalog.length };
+  return { dienste: dienste.length, einsaetze: einsaetze.length, uebungen: uebungen.length, katalog: katalog.length };
 }
 
 /** Merkt sich, wann zuletzt gesichert wurde (für die Erinnerung). */

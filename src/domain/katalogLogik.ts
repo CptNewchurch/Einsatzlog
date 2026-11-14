@@ -1,4 +1,4 @@
-import type { Dienst, Einsatz, KatalogEintrag, KatalogTyp, Typ } from './types';
+import { hatPlan, type Dienst, type Einsatz, type KatalogEintrag, type KatalogTyp, type Typ, type Uebung } from './types';
 
 /** Entfernt Leerraum an den Rändern und doppelte Leerzeichen. */
 export function normName(s: string): string {
@@ -10,11 +10,12 @@ export function nameKey(s: string): string {
   return normName(s).toLocaleLowerCase('de-DE');
 }
 
-/** Wie oft ein Katalogeintrag je Typ verwendet wird (Anzahl der Einsätze bzw. Dienste). */
+/** Wie oft ein Katalogeintrag je Typ verwendet wird (Anzahl der Einsätze, Dienste bzw. Übungen). */
 export function nutzung(
   typ: KatalogTyp,
   dienste: readonly Dienst[],
   einsaetze: readonly Einsatz[],
+  uebungen: readonly Uebung[] = [],
 ): Map<number, number> {
   const m = new Map<number, number>();
   const plus = (id: number | undefined) => {
@@ -25,6 +26,7 @@ export function nutzung(
       einsaetze.forEach((e) => plus(e.kategorieId));
       break;
     case 'massnahme':
+    case 'fwmassnahme':
       einsaetze.forEach((e) => new Set((e.massnahmen ?? []).map((x) => x.massnahmeId)).forEach(plus));
       break;
     case 'diagnose':
@@ -42,10 +44,13 @@ export function nutzung(
       einsaetze.forEach((e) => plus(e.rolleId));
       break;
     case 'wache':
-      dienste.forEach((d) => !d.zusatzdienst && plus(d.wacheId));
+      dienste.forEach((d) => hatPlan(d) && plus(d.wacheId));
       break;
     case 'standort':
-      dienste.forEach((d) => d.zusatzdienst && plus(d.wacheId));
+      dienste.forEach((d) => !hatPlan(d) && plus(d.wacheId));
+      break;
+    case 'uebungsart':
+      uebungen.forEach((u) => plus(u.artId));
       break;
     case 'tag':
       einsaetze.forEach((e) => new Set(e.tagIds ?? []).forEach(plus));

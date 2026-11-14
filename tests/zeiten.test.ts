@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { berechneDienstZeiten } from '../src/domain/zeiten';
+import { berechneDienstZeiten, einsatzZeitraeume, laengeOhne, vereinigeZeitraeume } from '../src/domain/zeiten';
 import { kraefteText, standardKraefte, stichwortText } from '../src/domain/stichwort';
 import { MIN, zeitpunkt } from '../src/domain/time';
 
@@ -90,6 +90,114 @@ describe('Wachzeit', () => {
     const z = berechneDienstZeiten(dienst, einsaetze, true);
     expect(z.einsatzMin).toBe(300);
     expect(MIN).toBe(60_000);
+  });
+});
+
+describe('Übungen in der Schicht', () => {
+  const einsaetze = [
+    { alarm: T(14, 9, 0), status1: T(14, 9, 40), status2: T(14, 9, 55) },
+    { alarm: T(14, 12, 0), status1: T(14, 12, 30), status2: T(14, 12, 45) },
+  ];
+
+  it('wandert aus der Wachzeit in die Übungszeit, die Summe bleibt', () => {
+    const ohne = berechneDienstZeiten(dienst, einsaetze, true);
+    const mit = berechneDienstZeiten(dienst, einsaetze, true, [{ beginn: T(14, 10), ende: T(14, 11, 30) }]);
+    expect(mit.uebungMin).toBe(90);
+    expect(mit.wacheMin).toBe(ohne.wacheMin - 90);
+    expect(mit.einsatzMin).toBe(ohne.einsatzMin);
+    expect(mit.einsatzMin + mit.rueckfahrtMin + mit.wacheMin + mit.uebungMin).toBe(mit.dienstMin);
+  });
+
+  it('überlappende Übungen zählen nur einmal', () => {
+    const z = berechneDienstZeiten(dienst, einsaetze, true, [
+      { beginn: T(14, 10), ende: T(14, 11) },
+      { beginn: T(14, 10, 30), ende: T(14, 11, 30) },
+    ]);
+    expect(z.uebungMin).toBe(90);
+  });
+
+  it('Zeit im Einsatz oder auf der Rückfahrt bleibt dort', () => {
+    // 08:30–10:30: davon 09:00–09:55 Einsatz und Rückfahrt, es bleiben 08:30–09:00 und 09:55–10:30
+    const z = berechneDienstZeiten(dienst, einsaetze, true, [{ beginn: T(14, 8, 30), ende: T(14, 10, 30) }]);
+    expect(z.uebungMin).toBe(30 + 35);
+    expect(z.einsatzMin).toBe(70);
+    expect(z.rueckfahrtMin).toBe(30);
+    expect(z.einsatzMin + z.rueckfahrtMin + z.wacheMin + z.uebungMin).toBe(z.dienstMin);
+  });
+
+  it('zählt auch bei ausgeschaltetem Dienstrand, wenn vor dem ersten Einsatz geübt wurde', () => {
+    // Ohne Dienstrand ist die Zeit bis 09:00 keine Wachzeit, die Übung bleibt trotzdem eine Übung.
+    const z = berechneDienstZeiten(dienst, einsaetze, false, [{ beginn: T(14, 7, 30), ende: T(14, 8, 30) }]);
+    expect(z.uebungMin).toBe(60);
+    expect(z.wacheMin).toBe(125);
+    const ohneUebung = berechneDienstZeiten(dienst, einsaetze, false);
+    expect(ohneUebung.uebungMin).toBe(0);
+    expect(ohneUebung.wacheMin).toBe(125);
+  });
+
+  it('schneidet Übungen auf den Dienst zu', () => {
+    const z = berechneDienstZeiten(dienst, [], true, [{ beginn: T(14, 6), ende: T(14, 8) }, { beginn: T(15, 6, 30), ende: T(15, 9) }]);
+    expect(z.uebungMin).toBe(60 + 30);
+    expect(z.wacheMin).toBe(24 * 60 - 90);
+  });
+
+  it('ohne Übungen ist alles wie bisher', () => {
+    expect(berechneDienstZeiten(dienst, einsaetze, true, []).uebungMin).toBe(0);
+    expect(berechneDienstZeiten(dienst, einsaetze, true)).toEqual(berechneDienstZeiten(dienst, einsaetze, true, []));
+  });
+});
+
+describe('Übungsdienst', () => {
+  const uebungsdienst = { beginn: T(14, 8), ende: T(14, 16), uebungsdienst: true };
+
+  it('die ganze Dienstzeit zählt als Übung, auch ohne erfasste Übung und ohne Dienstrand', () => {
+    const z = berechneDienstZeiten(uebungsdienst, [], false);
+    expect(z.dienstMin).toBe(480);
+    expect(z.uebungMin).toBe(480);
+    expect(z.wacheMin).toBe(0);
+  });
+
+  it('Einsatz und Rückfahrt zählen nicht als Übung', () => {
+    const z = berechneDienstZeiten(uebungsdienst, [{ alarm: T(14, 10), status1: T(14, 10, 30), status2: T(14, 10, 50) }], false);
+    expect(z.einsatzMin).toBe(30);
+    expect(z.rueckfahrtMin).toBe(20);
+    expect(z.uebungMin).toBe(480 - 50);
+    expect(z.wacheMin).toBe(0);
+  });
+
+  it('erfasste Übungen ändern daran nichts', () => {
+    const z = berechneDienstZeiten(uebungsdienst, [], true, [{ beginn: T(14, 8), ende: T(14, 10) }]);
+    expect(z.uebungMin).toBe(480);
+  });
+});
+
+describe('Zeiträume', () => {
+  it('fasst zusammen, sortiert und beschneidet', () => {
+    expect(
+      vereinigeZeitraeume(
+        [{ beginn: 50, ende: 80 }, { beginn: 0, ende: 20 }, { beginn: 10, ende: 30 }, { beginn: 90, ende: 120 }, { beginn: 5, ende: 5 }],
+        0,
+        100,
+      ),
+    ).toEqual([[0, 30], [50, 80], [90, 100]]);
+  });
+
+  it('Einsatzzeit reicht bis Status 2, ohne Status 2 bis Status 1', () => {
+    expect(
+      einsatzZeitraeume(
+        [
+          { alarm: 10, status1: 20, status2: 30 },
+          { alarm: 50, status1: 60 },
+        ],
+        0,
+        100,
+      ),
+    ).toEqual([[10, 30], [50, 60]]);
+  });
+
+  it('rechnet die Länge ohne einen anderen Zeitraum', () => {
+    expect(laengeOhne([[0, 100]], [[10, 20], [90, 120]])).toBe(80);
+    expect(laengeOhne([[0, 10], [50, 60]], [])).toBe(20);
   });
 });
 
