@@ -1,0 +1,46 @@
+name: Auf GitHub Pages veröffentlichen
+
+# Läuft bei jeder Änderung auf dem Hauptzweig und lässt sich auch von Hand starten
+# (Reiter „Actions“ → „Auf GitHub Pages veröffentlichen“ → „Run workflow“).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # Die App liegt unter https://<name>.github.io/<repository>/ – der Pfad kommt aus dem Repository-Namen.
+      - run: npm run build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
