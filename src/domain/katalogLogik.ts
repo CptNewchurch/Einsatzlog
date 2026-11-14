@@ -10,7 +10,7 @@ export function nameKey(s: string): string {
   return normName(s).toLocaleLowerCase('de-DE');
 }
 
-/** Wie oft ein Katalogeintrag je Typ verwendet wird (Anzahl der Einsätze, Dienste bzw. Übungen). */
+/** Wie oft ein Katalogeintrag je Typ verwendet wird (Anzahl der Einsätze, Dienste bzw. Übungen; Maßnahmen und Orte zählen auch in Übungen). */
 export function nutzung(
   typ: KatalogTyp,
   dienste: readonly Dienst[],
@@ -28,6 +28,7 @@ export function nutzung(
     case 'massnahme':
     case 'fwmassnahme':
       einsaetze.forEach((e) => new Set((e.massnahmen ?? []).map((x) => x.massnahmeId)).forEach(plus));
+      uebungen.forEach((u) => new Set((u.massnahmen ?? []).map((x) => x.massnahmeId)).forEach(plus));
       break;
     case 'diagnose':
       einsaetze.forEach((e) => new Set([e.diagnoseId, e.leitstelleDiagnoseId]).forEach(plus));
@@ -48,6 +49,7 @@ export function nutzung(
       break;
     case 'standort':
       dienste.forEach((d) => !hatPlan(d) && plus(d.wacheId));
+      uebungen.forEach((u) => plus(u.ortId));
       break;
     case 'uebungsart':
       uebungen.forEach((u) => plus(u.artId));

@@ -7,6 +7,7 @@ import {
   FW_GRUPPEN,
   FW_GRUPPE_KURZ,
   FW_GRUPPE_NAME,
+  type Bereich,
   type Durchfuehrung,
   type FwGruppe,
   type KatalogEintrag,
@@ -148,15 +149,21 @@ interface SheetProps {
   onClose: () => void;
   werte: MassnahmeEintrag[];
   onHinzu: (k: KatalogEintrag) => void;
+  /** Überschreibt die Überschrift, z. B. in einer Übung. */
+  titel?: string;
+  /** Wo die Maßnahmen erfasst werden; bestimmt den Text am Eintrag („im Einsatz“ oder „in der Übung“). */
+  ort?: 'einsatz' | 'uebung';
 }
 
-function MassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
-  const { katalog, dienste, einsaetze } = useDaten();
+const WO: Record<NonNullable<SheetProps['ort']>, string> = { einsatz: 'im Einsatz', uebung: 'in der Übung' };
+
+function MassnahmeSheet({ offen, onClose, werte, onHinzu, titel = 'Maßnahme oder Medikament', ort = 'einsatz' }: SheetProps) {
+  const { katalog, dienste, einsaetze, uebungen } = useDaten();
   const toast = useToast();
   const [suche, setSuche] = useState('');
   const [neueArt, setNeueArt] = useState<MassnahmeArt>('medikament');
 
-  const gezaehlt = useMemo(() => nutzung('massnahme', dienste, einsaetze), [dienste, einsaetze]);
+  const gezaehlt = useMemo(() => nutzung('massnahme', dienste, einsaetze, uebungen), [dienste, einsaetze, uebungen]);
   const aktive = useMemo(
     () => sortiereNachNutzung(katalog.filter((k) => k.typ === 'massnahme' && k.aktiv), gezaehlt),
     [katalog, gezaehlt],
@@ -196,7 +203,7 @@ function MassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
   return (
     <Sheet
       offen={offen}
-      titel="Maßnahme oder Medikament"
+      titel={titel}
       onClose={schliesse}
       fuss={
         <Knopf variante="primaer" voll onClick={schliesse}>
@@ -248,7 +255,7 @@ function MassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
                         <Icon name="plus" groesse={18} />
                       </span>
                       <span className="auswahl__name">{k.name}</span>
-                      {n > 0 && <span className="auswahl__badge zahl">{n}× im Einsatz</span>}
+                      {n > 0 && <span className="auswahl__badge zahl">{n}× {WO[ort]}</span>}
                     </button>
                   </li>
                 );
@@ -326,13 +333,13 @@ export function FwMassnahmenBlock({ werte, onChange }: FwBlockProps) {
   );
 }
 
-function FwMassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
-  const { katalog, dienste, einsaetze } = useDaten();
+function FwMassnahmeSheet({ offen, onClose, werte, onHinzu, titel = 'Maßnahme auf Befehl', ort = 'einsatz' }: SheetProps) {
+  const { katalog, dienste, einsaetze, uebungen } = useDaten();
   const toast = useToast();
   const [suche, setSuche] = useState('');
   const [neueGruppe, setNeueGruppe] = useState<FwGruppe>('sonstige');
 
-  const gezaehlt = useMemo(() => nutzung('fwmassnahme', dienste, einsaetze), [dienste, einsaetze]);
+  const gezaehlt = useMemo(() => nutzung('fwmassnahme', dienste, einsaetze, uebungen), [dienste, einsaetze, uebungen]);
   const aktive = useMemo(
     () => sortiereNachNutzung(katalog.filter((k) => k.typ === 'fwmassnahme' && k.aktiv), gezaehlt),
     [katalog, gezaehlt],
@@ -373,7 +380,7 @@ function FwMassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
   return (
     <Sheet
       offen={offen}
-      titel="Maßnahme auf Befehl"
+      titel={titel}
       onClose={schliesse}
       fuss={
         <Knopf variante="primaer" voll onClick={schliesse}>
@@ -425,7 +432,7 @@ function FwMassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
                         <Icon name="plus" groesse={18} />
                       </span>
                       <span className="auswahl__name">{k.name}</span>
-                      {n > 0 && <span className="auswahl__badge zahl">{n}× im Einsatz</span>}
+                      {n > 0 && <span className="auswahl__badge zahl">{n}× {WO[ort]}</span>}
                     </button>
                   </li>
                 );
@@ -435,5 +442,93 @@ function FwMassnahmeSheet({ offen, onClose, werte, onHinzu }: SheetProps) {
         ))}
       {treffer.length === 0 && !neuName && <p className="hinweis">Keine Maßnahmen in der Liste.</p>}
     </Sheet>
+  );
+}
+
+/* ---------- Übung: Maßnahmen ohne Rechtsgrundlage ---------- */
+
+interface UebungBlockProps {
+  werte: MassnahmeEintrag[];
+  onChange: (w: MassnahmeEintrag[]) => void;
+  /** Aus welcher Liste zuerst gewählt wird; sie folgt dem Bereich der Übungsart. */
+  bereich?: Bereich;
+}
+
+/**
+ * Maßnahmen, die in einer Übung durchgeführt wurden. Eine Übung kann Feuerwehr und Rettungsdienst berühren,
+ * deshalb gibt es beide Listen. Eine Rechtsgrundlage braucht es nicht: Es ist geübt, nicht am Patienten angewandt.
+ */
+export function UebungMassnahmenBlock({ werte, onChange, bereich }: UebungBlockProps) {
+  const { katalogMap } = useDaten();
+  const [liste, setListe] = useState<Bereich | null>(null);
+
+  const setze = (i: number, patch: Partial<MassnahmeEintrag>) =>
+    onChange(werte.map((w, j) => (j === i ? { ...w, ...patch } : w)));
+  const hinzu = (k: KatalogEintrag) => onChange([...werte, { massnahmeId: k.id!, anzahl: 1 }]);
+
+  const knoepfe: { bereich: Bereich; label: string }[] = [
+    { bereich: 'FW', label: 'Feuerwehr' },
+    { bereich: 'RD', label: 'Rettungsdienst' },
+  ];
+  if (bereich === 'RD') knoepfe.reverse();
+
+  return (
+    <div className="massnahmen">
+      {werte.length === 0 && (
+        <p className="hinweis">Noch keine Maßnahme erfasst. Trage ein, was du in der Übung selbst durchgeführt hast, zum Beispiel Löschangriff oder Reanimation.</p>
+      )}
+      {werte.map((w, i) => {
+        const k = katalogMap.get(w.massnahmeId);
+        const untertitel =
+          k?.typ === 'fwmassnahme'
+            ? `Feuerwehr · ${FW_GRUPPE_NAME[k.gruppe ?? 'sonstige']}`
+            : `Rettungsdienst · ${ART_NAME[k?.art ?? 'sonstige']}`;
+        return (
+          <div className="massnahme massnahme--kompakt" key={i}>
+            <div className="massnahme__kopf">
+              <div>
+                <div className="massnahme__name">{k?.name ?? '?'}</div>
+                <div className="massnahme__art">{untertitel}</div>
+              </div>
+              <button
+                type="button"
+                className="icon-knopf"
+                aria-label={`${k?.name ?? 'Maßnahme'} entfernen`}
+                onClick={() => onChange(werte.filter((_, j) => j !== i))}
+              >
+                <Icon name="papierkorb" />
+              </button>
+            </div>
+            <div className="massnahme__zahl">
+              <span className="feld__label">{k?.art === 'medikament' ? 'Gaben' : 'Anzahl'}</span>
+              <Stepper label={`Anzahl ${k?.name ?? ''}`} wert={w.anzahl} min={1} max={20} onChange={(n) => setze(i, { anzahl: n })} />
+            </div>
+          </div>
+        );
+      })}
+      <div className="knopfreihe">
+        {knoepfe.map((x) => (
+          <Knopf key={x.bereich} variante="sekundaer" onClick={() => setListe(x.bereich)}>
+            <Icon name="plus" groesse={20} /> {x.label}
+          </Knopf>
+        ))}
+      </div>
+      <FwMassnahmeSheet
+        offen={liste === 'FW'}
+        onClose={() => setListe(null)}
+        werte={werte}
+        onHinzu={hinzu}
+        titel="Maßnahme Feuerwehr"
+        ort="uebung"
+      />
+      <MassnahmeSheet
+        offen={liste === 'RD'}
+        onClose={() => setListe(null)}
+        werte={werte}
+        onHinzu={hinzu}
+        titel="Maßnahme Rettungsdienst"
+        ort="uebung"
+      />
+    </div>
   );
 }

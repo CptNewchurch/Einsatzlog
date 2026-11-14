@@ -148,7 +148,10 @@ export function erzeugeUebungenCsv(
 ): string {
   const name = (id: number | undefined) => (id == null ? '' : (katalog.get(id)?.name ?? ''));
   const dienstMap = new Map(dienste.map((d) => [d.id!, d]));
-  const kopf = ['Datum', 'Beginn', 'Ende', 'Dauer (min)', 'Art', 'Bereich', 'Thema', 'Dienst', 'Dienstart', 'Wache / Standort', 'Notiz'];
+  const kopf = [
+    'Datum', 'Beginn', 'Ende', 'Dauer (min)', 'Art', 'Bereich', 'Thema', 'Ort', 'Dienst', 'Dienstart', 'Wache / Standort',
+    'Atemschutz', 'Atemschutz (min)', 'Maßnahmen', 'Notiz',
+  ];
   const zeilen = [...uebungen]
     .sort((a, b) => a.beginn - b.beginn)
     .map((u): Zelle[] => {
@@ -162,9 +165,13 @@ export function erzeugeUebungenCsv(
         name(u.artId),
         bereich ? BEREICH_NAME[bereich] : '',
         u.thema ?? '',
+        name(u.ortId),
         d ? fmtDatum(d.beginn) : '',
         d ? DIENSTART_NAME[dienstartVon(d)] : '',
         d ? name(d.wacheId) : '',
+        u.atemschutz ? true : '',
+        u.atemschutz ? (u.atemschutzMin ?? '') : '',
+        (u.massnahmen ?? []).map((m) => `${name(m.massnahmeId)} ${m.anzahl}×`).join(', '),
         u.notiz ?? '',
       ];
     });

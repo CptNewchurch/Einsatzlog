@@ -158,13 +158,43 @@ describe('CSV mit Übungen', () => {
   it('schreibt jede Übung mit Art, Bereich, Thema und dem Dienst', () => {
     const zeilen = erzeugeUebungenCsv([dienst, uebungsdienst], [inSchicht, uebung], katalog).trim().split('\r\n');
     const kopf = zeilen[0].split(';');
-    expect(kopf).toEqual(['Datum', 'Beginn', 'Ende', 'Dauer (min)', 'Art', 'Bereich', 'Thema', 'Dienst', 'Dienstart', 'Wache / Standort', 'Notiz']);
+    expect(kopf).toEqual([
+      'Datum', 'Beginn', 'Ende', 'Dauer (min)', 'Art', 'Bereich', 'Thema', 'Ort', 'Dienst', 'Dienstart', 'Wache / Standort',
+      'Atemschutz', 'Atemschutz (min)', 'Maßnahmen', 'Notiz',
+    ]);
     // nach Zeit sortiert: erst die Mai-Übung, dann die vom November
-    expect(zeilen[1]).toBe(['09.05.2026', '08:00', '11:30', '210', 'Atemschutzübung', 'Feuerwehr', '"Übungsstrecke; Brandcontainer"', '09.05.2026', 'Übungsdienst', 'Feuerwehrschule', ''].join(';'));
+    expect(zeilen[1]).toBe(['09.05.2026', '08:00', '11:30', '210', 'Atemschutzübung', 'Feuerwehr', '"Übungsstrecke; Brandcontainer"', '', '09.05.2026', 'Übungsdienst', 'Feuerwehrschule', '', '', '', ''].join(';'));
     const w = zeilen[2].split(';');
     expect(w.slice(0, 5)).toEqual(['14.11.2026', '14:00', '15:30', '90', 'Atemschutzübung']);
-    expect(w[8]).toBe('Regeldienst');
-    expect(w[9]).toBe('FRW 1 (Paffrather Straße)');
+    expect(w[kopf.indexOf('Dienstart')]).toBe('Regeldienst');
+    expect(w[kopf.indexOf('Wache / Standort')]).toBe('FRW 1 (Paffrather Straße)');
+  });
+
+  it('schreibt Ort, Atemschutz und Maßnahmen einer Übung', () => {
+    const mit: Uebung = {
+      ...uebung,
+      thema: 'Übungsstrecke',
+      ortId: 8,
+      atemschutz: true,
+      atemschutzMin: 35,
+      massnahmen: [
+        { massnahmeId: 9, anzahl: 2 },
+        { massnahmeId: 3, anzahl: 1 },
+      ],
+    };
+    const zeilen = erzeugeUebungenCsv([dienst, uebungsdienst], [mit, inSchicht], katalog).trim().split('\r\n');
+    const kopf = zeilen[0].split(';');
+    const spalte = (z: string, n: string) => z.split(';')[kopf.indexOf(n)];
+    expect(spalte(zeilen[1], 'Ort')).toBe('Feuerwehrschule');
+    expect(spalte(zeilen[1], 'Atemschutz')).toBe('ja');
+    expect(spalte(zeilen[1], 'Atemschutz (min)')).toBe('35');
+    // Maßnahmen ohne Rechtsgrundlage: nur Name und Anzahl
+    expect(spalte(zeilen[1], 'Maßnahmen')).toBe('Löschangriff im Innenangriff 2×, Epinephrin 1×');
+    // ohne Angaben bleiben die Felder leer
+    expect(spalte(zeilen[2], 'Ort')).toBe('');
+    expect(spalte(zeilen[2], 'Atemschutz')).toBe('');
+    expect(spalte(zeilen[2], 'Atemschutz (min)')).toBe('');
+    expect(spalte(zeilen[2], 'Maßnahmen')).toBe('');
   });
 
   it('Übungsdienste haben in der Dienste-Liste keinen Plan und keinen Saldo, aber Übungszeit', () => {

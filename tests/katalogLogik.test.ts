@@ -48,6 +48,27 @@ describe('Nutzung von Wachen, Standorten und Übungsarten', () => {
   });
 });
 
+describe('Nutzung in Übungen', () => {
+  const dienst = (rest: Partial<Dienst>): Dienst => ({ sollBeginn: 1, sollEnde: 2, beginn: 1, ende: 2, ...rest });
+  const uebungen: Uebung[] = [
+    { dienstId: 1, beginn: 1, ende: 2, artId: 7, ortId: 20, massnahmen: [{ massnahmeId: 30, anzahl: 2 }, { massnahmeId: 30, anzahl: 1 }] },
+    { dienstId: 1, beginn: 3, ende: 4, artId: 7, ortId: 22, massnahmen: [{ massnahmeId: 31, anzahl: 1 }] },
+  ];
+
+  it('Maßnahmen zählen Einsätze und Übungen, in einer Übung nur einmal je Maßnahme', () => {
+    const fw = [einsatz({ typ: 'F', massnahmen: [{ massnahmeId: 30, anzahl: 2, durchfuehrung: 'befehl' }] })];
+    expect([...nutzung('fwmassnahme', [], fw, uebungen)]).toEqual([[30, 2], [31, 1]]);
+    expect([...nutzung('massnahme', [], [], uebungen)]).toEqual([[30, 1], [31, 1]]);
+    // ohne Übungen ändert sich nichts
+    expect([...nutzung('fwmassnahme', [], fw)]).toEqual([[30, 1]]);
+  });
+
+  it('Orte der Übungen zählen zu den Standorten der Dienste', () => {
+    const dienste = [dienst({ id: 3, wacheId: 20, uebungsdienst: true }), dienst({ id: 4, wacheId: 21, zusatzdienst: true })];
+    expect([...nutzung('standort', dienste, [], uebungen)]).toEqual([[20, 2], [21, 1], [22, 1]]);
+  });
+});
+
 describe('Reihenfolge der Vorschläge', () => {
   const eintrag = (id: number, name: string): KatalogEintrag => ({ id, typ: 'diagnose', name, aktiv: true });
 

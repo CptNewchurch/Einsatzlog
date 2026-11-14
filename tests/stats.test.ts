@@ -180,6 +180,16 @@ describe('Maßnahmen-Nachweis', () => {
     expect(m.zeilen[2].ohne).toBe(1);
   });
 
+  it('derselbe Eintrag mehrfach in einem Einsatz zählt den Einsatz nur einmal', () => {
+    const liste: Einsatz[] = [
+      { ...basis, id: 1, massnahmen: [{ massnahmeId: 1, anzahl: 1, durchfuehrung: 'vorab' }, { massnahmeId: 1, anzahl: 1, durchfuehrung: 'vorab' }] },
+      { ...basis, id: 2, massnahmen: [{ massnahmeId: 1, anzahl: 1, durchfuehrung: 'eigen' }] },
+    ];
+    const m = berechneMassnahmen(liste, katalog);
+    expect(m.zeilen[0]).toMatchObject({ anzahl: 3, einsaetze: 2, vorab: 2, eigen: 1 });
+    expect(m.summe).toMatchObject({ anzahl: 3, einsaetze: 2 });
+  });
+
   it('kommt ohne Maßnahmen zurecht', () => {
     expect(berechneMassnahmen([{ ...basis, id: 1 }], katalog)).toEqual({
       zeilen: [],
@@ -212,6 +222,15 @@ describe('Maßnahmen auf Befehl (Feuerwehr)', () => {
     expect(m.gruppen[0].zeilen).toEqual([
       { massnahmeId: 10, name: 'Löschangriff im Innenangriff', anzahl: 3, einsaetze: 2 },
       { massnahmeId: 11, name: 'Erkundung', anzahl: 1, einsaetze: 1 },
+    ]);
+  });
+
+  it('dieselbe Maßnahme mehrfach in einem Einsatz zählt den Einsatz nur einmal', () => {
+    const doppelt: Einsatz[] = [
+      { ...basis, id: 1, typ: 'F', massnahmen: [{ massnahmeId: 10, anzahl: 1, durchfuehrung: 'befehl' }, { massnahmeId: 10, anzahl: 1, durchfuehrung: 'befehl' }] },
+    ];
+    expect(berechneFwMassnahmen(doppelt, katalog).gruppen[0].zeilen).toEqual([
+      { massnahmeId: 10, name: 'Löschangriff im Innenangriff', anzahl: 2, einsaetze: 1 },
     ]);
   });
 

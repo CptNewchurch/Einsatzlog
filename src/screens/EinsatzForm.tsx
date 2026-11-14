@@ -334,14 +334,15 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
 
   /* ---- Listen ---- */
   const kategorien = useKatalogListe('kategorie');
+  // Nur Stichworte des gewählten Typs, häufig genutzte zuerst. Ein Stichwort eines anderen Typs legst du mit „+ Neu“ an.
+  const kategorieZaehler = useMemo(() => (typ ? kategorieNutzungFuerTyp(einsaetze, typ) : new Map<number, number>()), [typ, einsaetze]);
   const kategorieVorschlaege = useMemo(() => {
     if (!typ) return [];
-    const zaehler = kategorieNutzungFuerTyp(einsaetze, typ);
     return sortiereNachNutzung(
       kategorien.alle.filter((k) => (k.typen ?? []).includes(typ)),
-      zaehler,
+      kategorieZaehler,
     );
-  }, [typ, einsaetze, kategorien.alle]);
+  }, [typ, kategorien.alle, kategorieZaehler]);
   const fahrzeuge = useKatalogListe('fahrzeug', { bereich: bereich ?? undefined });
   const rollen = useKatalogListe('rolle', { bereich: bereich ?? undefined });
   const ressourcen = useKatalogListe('ressource');
@@ -560,13 +561,13 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
             label="Kategorie"
             katalogTyp="kategorie"
             vorschlaege={kategorieVorschlaege}
-            alle={kategorien.alle}
+            alle={kategorieVorschlaege}
             ausgewaehlt={f.kategorie}
             onChange={(ids) => set({ kategorie: ids })}
             neuExtra={{ typen: [typ] }}
             ton={bereich === 'RD' ? 'rd' : 'fw'}
             fehler={versucht ? fehler.kategorie : undefined}
-            nutzung={kategorien.zaehler}
+            nutzung={kategorieZaehler}
             namenAusgewaehlt={kategorien.namen}
             hinweis={kategorieVorschlaege.length === 0 ? 'Noch keine Kategorie für diesen Typ. Lege mit „+ Neu“ die erste an.' : undefined}
           />

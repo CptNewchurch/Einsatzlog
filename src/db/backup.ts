@@ -142,7 +142,12 @@ export function pruefeBackup(roh: unknown): BackupDatei {
       !istZahl(u.dienstId) ||
       !istZahl(u.beginn) ||
       !istZahl(u.ende) ||
-      u.ende <= u.beginn
+      u.ende <= u.beginn ||
+      // Ort, Atemschutz und Maßnahmen kamen später dazu; ältere Sicherungen haben sie nicht.
+      (u.ortId != null && !istZahl(u.ortId)) ||
+      (u.atemschutzMin != null && !istZahl(u.atemschutzMin)) ||
+      (u.massnahmen != null &&
+        (!Array.isArray(u.massnahmen) || u.massnahmen.some((m) => !istObjekt(m) || !istZahl(m.massnahmeId) || !istZahl(m.anzahl))))
     ) {
       throw new BackupFehler(`Übung Nr. ${i + 1} in der Sicherung ist ungültig.`);
     }

@@ -20,6 +20,7 @@ import { Icon, type IconName } from './ui/icons';
 import { ToastProvider, useToast } from './ui/overlays';
 import { Seite } from './ui/seite';
 import { useTheme } from './ui/theme';
+import { merkeRegistrierung } from './ui/update';
 
 const TABS: { id: ReturnType<typeof tabVon>; label: string; pfad: string; icon: IconName }[] = [
   { id: 'dienste', label: 'Dienste', pfad: '/', icon: 'dienste' },
@@ -93,7 +94,11 @@ function UpdateHinweise() {
     needRefresh: [neueVersion],
     offlineReady: [offlineBereit, setOfflineBereit],
     updateServiceWorker,
-  } = useRegisterSW();
+  } = useRegisterSW({
+    onRegisteredSW(_url, registrierung) {
+      if (registrierung) merkeRegistrierung(registrierung);
+    },
+  });
 
   useEffect(() => {
     if (!offlineBereit) return;

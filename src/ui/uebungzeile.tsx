@@ -10,7 +10,12 @@ interface Props {
 /** Eine Übung in Listen, im gleichen Stil wie ein Einsatz, mit violettem Rand. */
 export function UebungZeile({ uebung: u, mitDatum }: Props) {
   const d = useDaten();
-  const marken = [u.thema, u.notiz ? 'mit Notiz' : ''].filter(Boolean) as string[];
+  const marken: string[] = [];
+  if (u.thema) marken.push(u.thema);
+  if (u.atemschutz) marken.push(u.atemschutzMin ? `Atemschutz ${u.atemschutzMin} min` : 'Atemschutz');
+  const anzahl = (u.massnahmen ?? []).length;
+  if (anzahl > 0) marken.push(`${anzahl} Maßn.`);
+  if (u.notiz) marken.push('mit Notiz');
   return (
     <a className="einsatzzeile einsatzzeile--ue" href={`#/uebung/${u.id}`}>
       <div className="einsatzzeile__kopf">
@@ -23,6 +28,7 @@ export function UebungZeile({ uebung: u, mitDatum }: Props) {
       <div className="einsatzzeile__meta zahl">
         {mitDatum && `${fmtDatumKurz(u.beginn)} · `}
         {fmtZeit(u.beginn)}–{fmtZeit(u.ende)} · {fmtDauer(minutenZwischen(u.beginn, u.ende))}
+        {u.ortId != null && ` · ${katalogName(d, u.ortId)}`}
       </div>
       {marken.length > 0 && (
         <ul className="einsatzzeile__marken">

@@ -9,7 +9,7 @@ import {
   type MassnahmenZeile,
   type StatFilter,
 } from '../domain/stats';
-import { berechneUebungen } from '../domain/uebungen';
+import { berechneUebungen, berechneUebungsMassnahmen, waehleUebungen, type UebungsMassnahmeZeile } from '../domain/uebungen';
 import { berechneTriage } from '../domain/triageStats';
 import { stichwortText, TYP_INFO } from '../domain/stichwort';
 import { fmtDauer, fmtSaldo, fmtStunden, fmtZahl } from '../domain/time';
@@ -107,6 +107,32 @@ function FwMassnahmenTabelle({ gruppe }: { gruppe: FwMassnahmenGruppe }) {
   );
 }
 
+function UebungsMassnahmenTabelle({ titel, zeilen }: { titel: string; zeilen: UebungsMassnahmeZeile[] }) {
+  return (
+    <div className="tabelle-huelle">
+      <table className="tabelle tabelle--massnahmen tabelle--einsaetze">
+        <caption className="tabelle__titel">{titel}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Maßnahme</th>
+            <th scope="col" className="zahl">Anzahl</th>
+            <th scope="col" className="zahl">Übungen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {zeilen.map((z) => (
+            <tr key={z.massnahmeId}>
+              <th scope="row">{z.name}</th>
+              <td className="zahl">{fmtZahl(z.anzahl)}</td>
+              <td className="zahl">{z.uebungen}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function Statistik() {
   const daten = useDaten();
   const { dienste, einsaetze, uebungen, einst, katalogMap } = daten;
@@ -144,6 +170,10 @@ export function Statistik() {
     [dienste, einsaetze, uebungen, filter, einst.wachzeitMitDienstRand],
   );
   const ueb = useMemo(() => berechneUebungen(dienste, uebungen, filter, katalogMap, einsaetze), [dienste, uebungen, filter, katalogMap, einsaetze]);
+  const uebMassn = useMemo(
+    () => berechneUebungsMassnahmen(waehleUebungen(dienste, uebungen, filter, katalogMap), katalogMap, filter.bereich),
+    [dienste, uebungen, filter, katalogMap],
+  );
   const gewaehlt = useMemo(() => waehleEinsaetze(dienste, einsaetze, filter), [dienste, einsaetze, filter]);
   const massn = useMemo(() => berechneMassnahmen(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
   const fwMassn = useMemo(() => berechneFwMassnahmen(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
@@ -170,6 +200,10 @@ export function Statistik() {
   const stichwortName = (typ: Parameters<typeof stichwortText>[0], kategorieId: number) =>
     stichwortText(typ, katalogName(daten, kategorieId));
   const regelDienste = dienstart === 'alle' || dienstart === 'regel';
+  // Atemschutz zählt aus Feuerwehr-Einsätzen und aus Übungen, die als Atemschutzeinsatz gewertet werden.
+  const asEinsatz = { anzahl: s.feuerwehr.atemschutz, minuten: s.feuerwehr.atemschutzMin };
+  const asUebung = ueb.atemschutz;
+  const asGesamt = { anzahl: asEinsatz.anzahl + asUebung.anzahl, minuten: asEinsatz.minuten + asUebung.minuten };
   const ue = s.ueberstunden;
   const hatUeberstunden = ue.diensteMitPlus + ue.diensteMitMinus > 0;
   const massnNachArt = (['medikament', 'invasiv', 'sonstige'] as const)
@@ -394,8 +428,6 @@ export function Statistik() {
               <KpiRaster>
                 <Kpi wert={fmtZahl(s.feuerwehr.einsaetze)} label="Feuerwehr-Einsätze" ton="fw" zusatz={`Median ${minText(s.medianFwMin)}`} />
                 <Kpi wert={fmtZahl(s.feuerwehr.mig)} label="Menschenleben in Gefahr" ton="fw" zusatz={`${prozent(s.feuerwehr.mig, s.feuerwehr.einsaetze)} der Einsätze`} />
-                <Kpi wert={fmtZahl(s.feuerwehr.atemschutz)} label="Atemschutzeinsätze" ton="fw" />
-                <Kpi wert={fmtDauer(s.feuerwehr.atemschutzMin)} label="Unter Atemschutz" ton="fw" zusatz={s.feuerwehr.atemschutz > 0 ? `Ø ${fmtDauer(s.feuerwehr.atemschutzMin / s.feuerwehr.atemschutz)} je Einsatz` : undefined} />
               </KpiRaster>
               {fwMassn.summe.anzahl > 0 ? (
                 <>
@@ -416,6 +448,55 @@ export function Statistik() {
               ) : (
                 <p className="hinweis">In {zeitraum} sind keine Maßnahmen auf Befehl erfasst.</p>
               )}
+            </Abschnitt>
+          )}
+
+          {bereich !== 'RD' && asGesamt.anzahl > 0 && (
+            <Abschnitt titel="Atemschutz">
+              <KpiRaster>
+                <Kpi
+                  wert={fmtZahl(asGesamt.anzahl)}
+                  label="Atemschutzeinsätze"
+                  ton="fw"
+                  zusatz={`${asEinsatz.anzahl} im Einsatz · ${asUebung.anzahl} in Übungen`}
+                />
+                <Kpi
+                  wert={fmtDauer(asGesamt.minuten)}
+                  label="Unter Atemschutz"
+                  ton="fw"
+                  zusatz={`Ø ${fmtDauer(asGesamt.minuten / asGesamt.anzahl)} je Einsatz`}
+                />
+              </KpiRaster>
+              <div className="tabelle-huelle">
+                <table className="tabelle tabelle--massnahmen tabelle--einsaetze">
+                  <caption className="tabelle__titel">Atemschutz im Nachweis</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Wo</th>
+                      <th scope="col" className="zahl">Anzahl</th>
+                      <th scope="col" className="zahl">Zeit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <th scope="row">Einsätze</th>
+                      <td className="zahl">{fmtZahl(asEinsatz.anzahl)}</td>
+                      <td className="zahl">{fmtDauer(asEinsatz.minuten)}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">Übungen</th>
+                      <td className="zahl">{fmtZahl(asUebung.anzahl)}</td>
+                      <td className="zahl">{fmtDauer(asUebung.minuten)}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">Gesamt</th>
+                      <td className="zahl">{fmtZahl(asGesamt.anzahl)}</td>
+                      <td className="zahl">{fmtDauer(asGesamt.minuten)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="hinweis">Eine Übung zählt, wenn du sie im Übungsformular als Atemschutzeinsatz wertest. Die Zeit ist die Zeit unter Atemschutz, nicht die Dauer der Übung.</p>
             </Abschnitt>
           )}
 
@@ -466,6 +547,22 @@ export function Statistik() {
                   <p className="hinweis">
                     Nicht aufgeschlüsselt ist Zeit in Übungsdiensten, für die keine Übung erfasst ist, zum Beispiel Pausen. Die ganze Zeit des Dienstes zählt als Übung.
                   </p>
+                )}
+                {uebMassn.summe.anzahl > 0 && (
+                  <>
+                    <KpiRaster>
+                      <Kpi
+                        ton="ue"
+                        wert={fmtZahl(uebMassn.summe.anzahl)}
+                        label="Maßnahmen in Übungen"
+                        zusatz={`in ${uebMassn.summe.uebungen} ${uebMassn.summe.uebungen === 1 ? 'Übung' : 'Übungen'}`}
+                      />
+                      <Kpi ton="ue" wert={fmtZahl(uebMassn.summe.verschiedene)} label="Verschiedene Maßnahmen" />
+                    </KpiRaster>
+                    {uebMassn.fw.length > 0 && <UebungsMassnahmenTabelle titel="Feuerwehr" zeilen={uebMassn.fw} />}
+                    {uebMassn.rd.length > 0 && <UebungsMassnahmenTabelle titel="Rettungsdienst" zeilen={uebMassn.rd} />}
+                    <p className="hinweis">Maßnahmen aus Übungen zählen nicht im Maßnahmen-Nachweis der Einsätze.</p>
+                  </>
                 )}
               </>
             )}

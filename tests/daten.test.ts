@@ -308,6 +308,44 @@ describe('Sicherung', () => {
     expect(await erzeugeBackup(1_700_000_000_000)).toEqual(vorher);
   });
 
+  it('Hin- und Rückweg erhält Ort, Atemschutz und Maßnahmen einer Übung', async () => {
+    const { dienstId, artId } = await mitUebungen();
+    const ortId = (await legeKatalogEintragAn('standort', 'Feuerwehrschule')).id!;
+    const massnahmeId = (await legeKatalogEintragAn('fwmassnahme', 'Löschangriff', { gruppe: 'brand' })).id!;
+    const id = await speichereUebung({
+      dienstId,
+      beginn: T('2026-11-14', 16),
+      ende: T('2026-11-14', 18),
+      artId,
+      ortId,
+      atemschutz: true,
+      atemschutzMin: 30,
+      massnahmen: [{ massnahmeId, anzahl: 2 }],
+    });
+    const vorher = await erzeugeBackup(1_700_000_000_000);
+    await loescheAlleDaten();
+    await stelleWiederHer(leseBackupText(JSON.stringify(vorher)));
+    expect(await db.uebungen.get(id)).toMatchObject({ ortId, atemschutz: true, atemschutzMin: 30, massnahmen: [{ massnahmeId, anzahl: 2 }] });
+    expect(await erzeugeBackup(1_700_000_000_000)).toEqual(vorher);
+  });
+
+  it('lehnt kaputte Maßnahmen, Orte und Atemschutzminuten in Übungen ab', async () => {
+    await mitUebungen();
+    const gut = JSON.parse(JSON.stringify(await erzeugeBackup()));
+    const mit = (aenderung: Record<string, unknown>) => {
+      const kopie = structuredClone(gut);
+      Object.assign(kopie.daten.uebungen[0], aenderung);
+      return kopie;
+    };
+    expect(() => pruefeBackup(mit({ massnahmen: 'kaputt' }))).toThrow(/Übung Nr\. 1 in der Sicherung ist ungültig/);
+    expect(() => pruefeBackup(mit({ massnahmen: [{ massnahmeId: 'x', anzahl: 1 }] }))).toThrow(/Übung Nr\. 1 in der Sicherung ist ungültig/);
+    expect(() => pruefeBackup(mit({ massnahmen: [{ massnahmeId: 3 }] }))).toThrow(/Übung Nr\. 1 in der Sicherung ist ungültig/);
+    expect(() => pruefeBackup(mit({ ortId: 'Schule' }))).toThrow(/Übung Nr\. 1 in der Sicherung ist ungültig/);
+    expect(() => pruefeBackup(mit({ atemschutzMin: '20' }))).toThrow(/Übung Nr\. 1 in der Sicherung ist ungültig/);
+    // ältere Sicherungen ohne diese Felder bleiben gültig
+    expect(() => pruefeBackup(gut)).not.toThrow();
+  });
+
   it('liest Sicherungen der Version 1 ohne Übungen', async () => {
     await beispielDaten();
     const alt = JSON.parse(JSON.stringify(await erzeugeBackup()));

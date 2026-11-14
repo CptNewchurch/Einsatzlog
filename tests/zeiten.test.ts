@@ -205,7 +205,7 @@ describe('Stichwort', () => {
   it('baut den Stichworttext', () => {
     expect(stichwortText('R', 'Chirurgisch')).toBe('R-Chirurgisch');
     expect(stichwortText('F', 'Gebäude', true)).toBe('F-Gebäude MIG');
-    expect(stichwortText('H', 'P-Tür', true)).toBe('H-P-Tür');
+    expect(stichwortText('H', 'P Tür', true)).toBe('H-P Tür');
   });
   it('baut den Kräfteansatz', () => {
     expect(kraefteText(1, 0)).toBe('R1N0');

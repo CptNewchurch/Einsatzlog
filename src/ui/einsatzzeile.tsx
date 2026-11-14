@@ -23,6 +23,7 @@ export function EinsatzZeile({ einsatz: e, mitDatum }: Props) {
   if (bewertung === 'hoch') marken.push('Alarm zu hoch');
   else if (bewertung === 'niedrig') marken.push('Alarm zu niedrig');
   if (e.mig) marken.push('MIG');
+  if (e.atemschutz) marken.push(e.atemschutzMin ? `Atemschutz ${e.atemschutzMin} min` : 'Atemschutz');
   if (e.nachalarmiert) marken.push('nachalarmiert');
   (e.nachforderungen ?? []).forEach((n) => marken.push(`Nachf. ${katalogName(d, n.ressourceId)}`));
   if ((e.massnahmen ?? []).length > 0) marken.push(`${e.massnahmen!.length} Maßn.`);

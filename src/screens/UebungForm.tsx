@@ -12,15 +12,17 @@ import {
   STUNDE,
   uhrzeitImFenster,
 } from '../domain/time';
-import { hatPlan, type Dienst, type Uebung } from '../domain/types';
+import { vorschlagAtemschutzMin } from '../domain/uebungen';
+import { hatPlan, type Dienst, type MassnahmeEintrag, type Uebung } from '../domain/types';
 import { dienstSaldo } from '../domain/zeiten';
 import { navigate, zurueck } from '../router';
 import { katalogName, laufenderDienst, useDaten } from '../state/daten';
-import { Abschnitt, Chip, ChipReihe, Feld, Knopf, Leer, Meldung, TextFeld, ZeitFeld } from '../ui/controls';
+import { Abschnitt, Aufklappen, Chip, ChipReihe, Feld, Knopf, Leer, Meldung, Stepper, TextFeld, Toggle, ZeitFeld } from '../ui/controls';
 import { DienstWahl } from '../ui/dienstwahl';
 import { EinsatzartReihe } from '../ui/einsatzart';
 import { KatalogAuswahl } from '../ui/katalogwahl';
 import { ohneLeere, useKatalogListe } from '../ui/katalogListen';
+import { UebungMassnahmenBlock } from '../ui/massnahmen';
 import { Bestaetigung, useToast } from '../ui/overlays';
 import { Seite } from '../ui/seite';
 
@@ -77,10 +79,18 @@ interface FormState {
   dienstId: number;
   art: number[];
   thema: string;
+  /** Ort aus der Liste „standort“. */
+  ort: number[];
   beginn: string;
   ende: string;
+  atemschutz: boolean;
+  atemschutzMin: number;
+  massnahmen: MassnahmeEintrag[];
   notiz: string;
 }
+
+/** In einem Übungsdienst ist der Standort des Dienstes meist auch der Ort der Übung. */
+const ortVorschlag = (dienst: Dienst): number[] => (dienst.uebungsdienst && dienst.wacheId != null ? [dienst.wacheId] : []);
 
 /** Im Übungsdienst ist meist der Rest des Dienstes gemeint, ab der letzten Übung. */
 function vorschlagZeiten(dienst: Dienst, vorhanden: readonly Uebung[]): { beginn: string; ende: string } {
@@ -102,15 +112,23 @@ function Formular({ bestehend, dienstId }: { bestehend?: Uebung; dienstId: numbe
           dienstId: bestehend.dienstId,
           art: [bestehend.artId],
           thema: bestehend.thema ?? '',
+          ort: bestehend.ortId != null ? [bestehend.ortId] : [],
           beginn: fmtZeit(bestehend.beginn),
           ende: fmtZeit(bestehend.ende),
+          atemschutz: !!bestehend.atemschutz,
+          atemschutzMin: bestehend.atemschutzMin ?? 20,
+          massnahmen: bestehend.massnahmen ?? [],
           notiz: bestehend.notiz ?? '',
         }
       : {
           dienstId,
           art: [],
           thema: '',
+          ort: ortVorschlag(daten.dienstMap.get(dienstId)!),
           ...vorschlagZeiten(daten.dienstMap.get(dienstId)!, daten.uebungenNachDienst.get(dienstId) ?? []),
+          atemschutz: false,
+          atemschutzMin: 20,
+          massnahmen: [],
           notiz: '',
         },
   );
@@ -118,9 +136,13 @@ function Formular({ bestehend, dienstId }: { bestehend?: Uebung; dienstId: numbe
   const [versucht, setVersucht] = useState(false);
   const [loeschen, setLoeschen] = useState(false);
   const [speichert, setSpeichert] = useState(false);
+  const [massnahmenOffen, setMassnahmenOffen] = useState(f.massnahmen.length > 0);
 
   const dienst = daten.dienstMap.get(f.dienstId)!;
   const arten = useKatalogListe('uebungsart');
+  const orte = useKatalogListe('standort');
+  /** Die Art der Übung bestimmt, aus welcher Maßnahmenliste zuerst gewählt wird. */
+  const artBereich = daten.katalogMap.get(f.art[0])?.bereich;
 
   /* ---- Zeiten: Uhrzeiten werden im Fenster des Dienstes aufgelöst, wie beim Einsatz ---- */
   const bP = parseUhrzeit(f.beginn);
@@ -147,6 +169,10 @@ function Formular({ bestehend, dienstId }: { bestehend?: Uebung; dienstId: numbe
         : beginnMs != null && endeMs != null && endeMs <= beginnMs
           ? 'Das Ende muss nach dem Beginn liegen.'
           : undefined,
+    atemschutz:
+      f.atemschutz && dauerMin != null && f.atemschutzMin > dauerMin
+        ? `Die Zeit unter Atemschutz kann nicht länger sein als die Übung (${fmtDauer(dauerMin)}).`
+        : undefined,
   };
   const hatFehler = Object.values(fehler).some(Boolean);
   const zeigeZeit = (feld: 'beginn' | 'ende') => (versucht || f[feld] !== '' ? fehler[feld] : undefined);
@@ -160,8 +186,18 @@ function Formular({ bestehend, dienstId }: { bestehend?: Uebung; dienstId: numbe
   /* ---- Aktionen ---- */
   const wechsleDienst = (d: Dienst) => {
     const keineZeiten = f.beginn === '' && f.ende === '';
-    set({ dienstId: d.id!, ...(neu && keineZeiten ? vorschlagZeiten(d, daten.uebungenNachDienst.get(d.id!) ?? []) : {}) });
+    // Der vorgeschlagene Ort wechselt mit, solange du keinen anderen gewählt hast.
+    const alterVorschlag = ortVorschlag(dienst);
+    const ortUnveraendert = f.ort.length === 0 || (alterVorschlag.length > 0 && f.ort[0] === alterVorschlag[0]);
+    set({
+      dienstId: d.id!,
+      ...(neu && keineZeiten ? vorschlagZeiten(d, daten.uebungenNachDienst.get(d.id!) ?? []) : {}),
+      ...(neu && ortUnveraendert ? { ort: ortVorschlag(d) } : {}),
+    });
   };
+
+  const schalteAtemschutz = (an: boolean) =>
+    set({ atemschutz: an, ...(an ? { atemschutzMin: vorschlagAtemschutzMin(dauerMin) } : {}) });
 
   const speichern = async () => {
     setVersucht(true);
@@ -177,6 +213,10 @@ function Formular({ bestehend, dienstId }: { bestehend?: Uebung; dienstId: numbe
       ende: endeMs,
       artId: f.art[0],
       thema: f.thema.trim() || undefined,
+      ortId: f.ort[0],
+      atemschutz: f.atemschutz ? true : undefined,
+      atemschutzMin: f.atemschutz ? f.atemschutzMin : undefined,
+      massnahmen: f.massnahmen.length > 0 ? f.massnahmen : undefined,
       notiz: f.notiz.trim() || undefined,
     });
     try {
@@ -234,6 +274,18 @@ function Formular({ bestehend, dienstId }: { bestehend?: Uebung; dienstId: numbe
           hinweis="Zum Beispiel Atemschutzübung oder Reanimation. Die Liste wächst mit."
         />
         <TextFeld label="Thema" wert={f.thema} onChange={(thema) => set({ thema })} maxLength={80} placeholder="z. B. Übungsstrecke" hinweis="Optional. Keine Namen." />
+        <KatalogAuswahl
+          label="Ort"
+          katalogTyp="standort"
+          vorschlaege={orte.vorschlaege}
+          alle={orte.alle}
+          ausgewaehlt={f.ort}
+          onChange={(ids) => set({ ort: ids })}
+          ton="ue"
+          nutzung={orte.zaehler}
+          namenAusgewaehlt={orte.namen}
+          hinweis="Optional. Zum Beispiel Feuerwehrschule oder Übungsgelände. Die Liste wächst mit."
+        />
       </Abschnitt>
 
       <Abschnitt titel="Zeiten">
@@ -298,6 +350,38 @@ function Formular({ bestehend, dienstId }: { bestehend?: Uebung; dienstId: numbe
           </Meldung>
         )}
       </Abschnitt>
+
+      <Abschnitt titel="Atemschutz">
+        <Toggle
+          an={f.atemschutz}
+          onChange={schalteAtemschutz}
+          label="Als Atemschutzeinsatz werten"
+          hinweis="Die Übung zählt dann in der Statistik zu deinen Atemschutzeinsätzen."
+        />
+        {f.atemschutz && (
+          <Feld label="Dauer unter Atemschutz" fehler={fehler.atemschutz}>
+            <Stepper
+              label="Minuten unter Atemschutz"
+              wert={f.atemschutzMin}
+              min={5}
+              max={240}
+              schritt={5}
+              onChange={(atemschutzMin) => set({ atemschutzMin })}
+              einheit="min"
+            />
+          </Feld>
+        )}
+      </Abschnitt>
+
+      <Aufklappen
+        titel="Maßnahmen in der Übung"
+        zusatz={f.massnahmen.length > 0 ? `${f.massnahmen.length} Maßnahme${f.massnahmen.length === 1 ? '' : 'n'}` : undefined}
+        offen={massnahmenOffen}
+        onToggle={() => setMassnahmenOffen((o) => !o)}
+      >
+        <p className="hinweis">Nur, was du selbst durchgeführt hast. Diese Maßnahmen zählen nicht im Maßnahmen-Nachweis der Einsätze, sondern getrennt bei den Übungen.</p>
+        <UebungMassnahmenBlock werte={f.massnahmen} onChange={(massnahmen) => set({ massnahmen })} bereich={artBereich} />
+      </Aufklappen>
 
       <TextFeld label="Notiz" wert={f.notiz} onChange={(notiz) => set({ notiz })} mehrzeilig maxLength={500} hinweis="Keine Namen." />
 

@@ -1,13 +1,36 @@
-import { Abschnitt } from '../ui/controls';
+import { useState } from 'react';
+import { Abschnitt, Knopf } from '../ui/controls';
+import { useToast } from '../ui/overlays';
 import { Seite } from '../ui/seite';
+import { suchePruefeUpdate } from '../ui/update';
 import { APP_VERSION } from '../version';
 
+const UPDATE_TEXT = {
+  neu: 'Neue Version gefunden. Sie wird geladen, gleich kannst du aktualisieren.',
+  aktuell: `Du hast die neueste Version ${APP_VERSION}.`,
+  offline: 'Keine Verbindung. Versuche es noch einmal, wenn du Netz hast.',
+  'nicht-moeglich': 'Die Suche gibt es nur in der installierten App.',
+} as const;
+
 export function Ueber() {
+  const toast = useToast();
+  const [sucht, setSucht] = useState(false);
+
+  const suche = async () => {
+    setSucht(true);
+    const ergebnis = await suchePruefeUpdate();
+    setSucht(false);
+    toast.zeige(UPDATE_TEXT[ergebnis]);
+  };
+
   return (
     <Seite titel="Über Einsatzlog" zurueckZu="/mehr">
       <p className="text">
         Einsatzlog ist dein persönliches Einsatzbuch für Rettungsdienst und Feuerwehr. Version <span className="zahl">{APP_VERSION}</span>.
       </p>
+      <Knopf variante="sekundaer" onClick={() => void suche()} disabled={sucht}>
+        {sucht ? 'Suche läuft …' : 'Nach Updates suchen'}
+      </Knopf>
 
       <Abschnitt titel="Deine Daten bleiben bei dir">
         <p className="text">
@@ -27,12 +50,25 @@ export function Ueber() {
           <li><strong>Minusstunden:</strong> später angetreten oder früher abgelöst.</li>
           <li>Zusatzdienste und Übungsdienste haben keinen Plan und zählen nicht zu Über- und Minusstunden.</li>
           <li><strong>Übung:</strong> eine Einsatzart neben Rettungsdienst und Feuerwehr, die nicht als Einsatz zählt. Die Zeit, in der du auf Wache übst, zählt nicht zur Wachzeit. In einem Übungsdienst zählt die ganze Zeit als Übung.</li>
+          <li><strong>Atemschutz:</strong> Einsätze und Übungen, die du als Atemschutzeinsatz wertest, werden zusammen gezählt, mit der Zeit unter Atemschutz. Die Statistik zeigt beides getrennt und zusammen.</li>
         </ul>
+      </Abschnitt>
+
+      <Abschnitt titel="Stichworte der Feuerwehr">
+        <p className="text">
+          Die Stichworte für Feuer, Hilfeleistung und ABC sind nach der AAO der Berufsfeuerwehr Bergisch Gladbach (Version 5.2) vorbelegt. Die „MiG“-Zeilen der AAO erfasst du über den Schalter „MIG“ beim Feuer-Stichwort. Unter Mehr → Listen pflegen kannst du Stichworte umbenennen, ausblenden oder ergänzen.
+        </p>
       </Abschnitt>
 
       <Abschnitt titel="Maßnahmen auf Befehl">
         <p className="text">
           Im Feuerwehreinsatz erfasst du die Maßnahmen, die du auf Befehl des Einsatzleiters oder Gruppenführers ausgeführt hast, zum Beispiel Löschangriff oder Türöffnung. Dafür gibt es eine eigene Liste, die mit deinen Einsätzen wächst.
+        </p>
+      </Abschnitt>
+
+      <Abschnitt titel="Maßnahmen in Übungen">
+        <p className="text">
+          Was du in einer Übung selbst durchgeführt hast, trägst du in der Übung ein, aus der Liste der Feuerwehr oder des Rettungsdienstes. Eine Rechtsgrundlage ist dafür nicht nötig. Diese Maßnahmen werden bei den Übungen getrennt gezählt und fließen nicht in den Maßnahmen-Nachweis der Einsätze ein.
         </p>
       </Abschnitt>
 

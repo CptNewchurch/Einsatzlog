@@ -34,7 +34,7 @@ export function standardKraefte(typ: Typ): { rtw: number; nef: number } | null {
   return null;
 }
 
-/** „R-Chirurgisch“, „N-Internistisch“, „F-Gebäude MIG“, „H-P-Tür“. */
+/** „R-Chirurgisch“, „N-Internistisch“, „F-Gebäude MIG“, „H-P Tür“. */
 export function stichwortText(typ: Typ, kategorie: string, mig?: boolean): string {
   return `${typ}-${kategorie}${typ === 'F' && mig ? ' MIG' : ''}`;
 }

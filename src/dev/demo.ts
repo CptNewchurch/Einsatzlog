@@ -158,7 +158,7 @@ export async function ladeDemodaten(): Promise<void> {
       const e: Einsatz = {
         dienstId,
         typ,
-        kategorieId: rdTyp ? kat(fach) : typ === 'F' ? kat(wahl(['Gebäude', 'Gebäude', 'LKW', 'Gewerbebetrieb', 'Krankenhaus'])) : typ === 'ABC' ? kat('Gas') : kat(wahl(['P-Tür', 'P-Tür', 'P-Aufzug', 'Ölspur', 'P-Klemmt', 'Gas'])),
+        kategorieId: rdTyp ? kat(fach) : typ === 'F' ? kat(wahl(['Gebäude', 'Gebäude', 'Kleinbrand', 'PKW', 'LKW', 'Gewerbebetrieb', 'Krankenhaus'])) : typ === 'ABC' ? kat(wahl(['Gas', 'Gas', 'Ölspur Feuerwehr', 'CO'])) : kat(wahl(['P Tür', 'P Tür', 'P Aufzug', 'Wasserschaden', 'TH klein', 'P klemmt (1)', 'Baum'])),
         alarm,
         status1,
         ...(status2 ? { status2 } : {}),
@@ -231,29 +231,50 @@ export async function ladeDemodaten(): Promise<void> {
 
   // Übungen in der Schicht: nachmittags auf Wache, bei einigen Regeldiensten.
   const uebungen: Uebung[] = [];
-  const inSchicht: [number, string, string][] = [
-    [1, 'Atemschutzübung', 'Übungsstrecke'],
-    [4, 'Reanimation', 'Teamtraining'],
-    [7, 'Fahrzeug- und Gerätekunde', 'HLF Beladung'],
-    [10, 'Dienstsport', ''],
-    [13, 'Technische Hilfeleistung', 'Hydraulisches Rettungsgerät'],
-    [16, 'Atemschutzübung', ''],
+  const inSchicht: [number, string, string, Partial<Uebung>][] = [
+    [1, 'Atemschutzübung', 'Übungsstrecke', { atemschutz: true, atemschutzMin: 25, ortId: schuleId, massnahmen: [{ massnahmeId: fwMassn('Menschenrettung aus Gefahrenbereich'), anzahl: 2 }] }],
+    [4, 'Reanimation', 'Teamtraining', { massnahmen: [{ massnahmeId: massn('i.v.-Zugang'), anzahl: 2 }, { massnahmeId: massn('Manuelle Defibrillation'), anzahl: 2 }, { massnahmeId: massn('EGA: i-gel'), anzahl: 1 }] }],
+    [7, 'Fahrzeug- und Gerätekunde', 'HLF Beladung', {}],
+    [10, 'Dienstsport', '', {}],
+    [13, 'Technische Hilfeleistung', 'Hydraulisches Rettungsgerät', { massnahmen: [{ massnahmeId: fwMassn('Hydraulisches Rettungsgerät'), anzahl: 2 }] }],
+    [16, 'Atemschutzübung', '', { atemschutz: true, atemschutzMin: 20 }],
   ];
-  for (const [i, artName, thema] of inSchicht) {
+  for (const [i, artName, thema, extra] of inSchicht) {
     const d = dienste[i];
     if (!d || d.zusatzdienst || d.uebungsdienst) continue;
     const beginn = d.beginn + 390 * MIN;
-    uebungen.push({ dienstId: dienstIds[i], beginn, ende: beginn + 90 * MIN, artId: art(artName), ...(thema ? { thema } : {}) });
+    uebungen.push({ dienstId: dienstIds[i], beginn, ende: beginn + 90 * MIN, artId: art(artName), ...(thema ? { thema } : {}), ...extra });
   }
   // Der Übungstag in der Feuerwehrschule mit zwei Übungen und einer Mittagspause dazwischen.
   const schulIndex = dienste.findIndex((d) => d.uebungsdienst && d.wacheId === schuleId);
   const schule = dienste[schulIndex];
-  uebungen.push({ dienstId: dienstIds[schulIndex], beginn: schule.beginn, ende: schule.beginn + 210 * MIN, artId: art('Atemschutzübung'), thema: 'Übungsstrecke und Brandcontainer' });
-  uebungen.push({ dienstId: dienstIds[schulIndex], beginn: schule.beginn + 270 * MIN, ende: schule.ende, artId: art('Technische Hilfeleistung'), thema: 'Verkehrsunfall, Fahrzeugrettung' });
+  uebungen.push({
+    dienstId: dienstIds[schulIndex],
+    beginn: schule.beginn,
+    ende: schule.beginn + 210 * MIN,
+    artId: art('Atemschutzübung'),
+    thema: 'Übungsstrecke und Brandcontainer',
+    ortId: schuleId,
+    atemschutz: true,
+    atemschutzMin: 35,
+    massnahmen: [
+      { massnahmeId: fwMassn('Löschangriff im Innenangriff'), anzahl: 2 },
+      { massnahmeId: fwMassn('Menschenrettung aus Gefahrenbereich'), anzahl: 1 },
+    ],
+  });
+  uebungen.push({
+    dienstId: dienstIds[schulIndex],
+    beginn: schule.beginn + 270 * MIN,
+    ende: schule.ende,
+    artId: art('Technische Hilfeleistung'),
+    thema: 'Verkehrsunfall, Fahrzeugrettung',
+    ortId: schuleId,
+    massnahmen: [{ massnahmeId: fwMassn('Hydraulisches Rettungsgerät'), anzahl: 3 }],
+  });
   // Der Übungsabend: eine Übung füllt den ganzen Dienst.
   const abendIndex = dienste.findIndex((d) => d.uebungsdienst && d.wacheId === uebungswacheId);
   const abend = dienste[abendIndex];
-  uebungen.push({ dienstId: dienstIds[abendIndex], beginn: abend.beginn, ende: abend.ende, artId: art('Löschübung'), thema: 'Wasserentnahme aus offenem Gewässer' });
+  uebungen.push({ dienstId: dienstIds[abendIndex], beginn: abend.beginn, ende: abend.ende, artId: art('Löschübung'), thema: 'Wasserentnahme aus offenem Gewässer', ortId: uebungswacheId });
   await db.uebungen.bulkAdd(uebungen);
   await speichereEinstellungen({ letztesBackup: jetzt - 8 * 24 * STUNDE, letzterDienstId: dienstIds[0], standardWacheId: wache1, standardFahrzeugId: rtw, standardRolleId: tf });
   void heute;

@@ -1,7 +1,7 @@
 import { einsatzZeitraeume, laengeOhne, vereinigeZeitraeume, type ZeitEinsatz } from './zeiten';
 import { MIN } from './time';
 import { dienstPasst, type StatFilter } from './stats';
-import type { Bereich, Dienst, KatalogEintrag, Uebung } from './types';
+import type { Bereich, Dienst, FwGruppe, KatalogEintrag, MassnahmeArt, Uebung } from './types';
 
 /** Dauer einer Übung in Minuten. */
 export const uebungMinuten = (u: Pick<Uebung, 'beginn' | 'ende'>): number => Math.round((u.ende - u.beginn) / MIN);
@@ -49,6 +49,8 @@ export interface UebungsStatistik {
   imUebungsdienst: { dienste: number; anzahl: number; minuten: number };
   /** Zeit in Übungsdiensten, die keiner erfassten Übung zugeordnet ist (z. B. Pausen). Nur ohne Bereichsfilter. */
   restMin: number;
+  /** Übungen, die als Atemschutzeinsatz gewertet werden, mit der Zeit unter Atemschutz. */
+  atemschutz: { anzahl: number; minuten: number };
   /** Nach Dauer, die längste Art zuerst. */
   nachArt: UebungsZeile[];
 }
@@ -66,10 +68,15 @@ export function berechneUebungen(
   const imUebungsdienst = { dienste: 0, anzahl: 0, minuten: 0 };
   const arten = new Map<number, UebungsZeile>();
   const uebungsdienstIds = new Set<number>();
+  const atemschutz = { anzahl: 0, minuten: 0 };
 
   liste.forEach((u) => {
     const min = uebungMinuten(u);
     const dienst = dienstMap.get(u.dienstId)!;
+    if (u.atemschutz) {
+      atemschutz.anzahl += 1;
+      atemschutz.minuten += u.atemschutzMin ?? 0;
+    }
     if (dienst.uebungsdienst) {
       imUebungsdienst.anzahl += 1;
       imUebungsdienst.minuten += min;
@@ -116,6 +123,89 @@ export function berechneUebungen(
     inSchicht,
     imUebungsdienst,
     restMin,
+    atemschutz,
     nachArt: [...arten.values()].sort((a, b) => b.minuten - a.minuten || a.name.localeCompare(b.name, 'de')),
   };
+}
+
+/* ---------- Maßnahmen in Übungen ---------- */
+
+export interface UebungsMassnahmeZeile {
+  massnahmeId: number;
+  name: string;
+  /** Gruppe einer Feuerwehr-Maßnahme. */
+  gruppe?: FwGruppe;
+  /** Art einer Maßnahme im Rettungsdienst. */
+  art?: MassnahmeArt;
+  /** Wie oft durchgeführt (Summe der Anzahl). */
+  anzahl: number;
+  /** In wie vielen Übungen. */
+  uebungen: number;
+}
+
+export interface UebungsMassnahmen {
+  /** Maßnahmen aus der Liste der Feuerwehr, die häufigste zuerst. */
+  fw: UebungsMassnahmeZeile[];
+  /** Maßnahmen und Medikamente aus der Liste des Rettungsdienstes, die häufigste zuerst. */
+  rd: UebungsMassnahmeZeile[];
+  summe: { anzahl: number; uebungen: number; verschiedene: number };
+}
+
+/**
+ * Was in Übungen durchgeführt wurde, getrennt nach Feuerwehr und Rettungsdienst.
+ * Das ist eine eigene Auswertung: Maßnahmen aus Übungen zählen nicht im Maßnahmen-Nachweis der Einsätze.
+ * Mit einem Bereich zählen nur Maßnahmen aus der Liste dieses Bereichs.
+ */
+export function berechneUebungsMassnahmen(
+  uebungen: readonly Uebung[],
+  katalog: ReadonlyMap<number, KatalogEintrag>,
+  bereich: Bereich | 'alle' = 'alle',
+): UebungsMassnahmen {
+  const zeilen = new Map<number, UebungsMassnahmeZeile & { bereich: Bereich }>();
+  let anzahl = 0;
+  let mitMassnahmen = 0;
+  uebungen.forEach((u) => {
+    let gezaehlt = false;
+    // Dieselbe Maßnahme kann mehrfach eingetragen sein; die Übung zählt je Maßnahme nur einmal.
+    const gesehen = new Set<number>();
+    (u.massnahmen ?? []).forEach((m) => {
+      const k = katalog.get(m.massnahmeId);
+      const b: Bereich = k?.typ === 'fwmassnahme' ? 'FW' : 'RD';
+      if (bereich !== 'alle' && b !== bereich) return;
+      let z = zeilen.get(m.massnahmeId);
+      if (!z) {
+        z = {
+          massnahmeId: m.massnahmeId,
+          name: k?.name ?? '?',
+          bereich: b,
+          ...(b === 'FW' ? { gruppe: k?.gruppe ?? 'sonstige' } : { art: k?.art ?? 'sonstige' }),
+          anzahl: 0,
+          uebungen: 0,
+        };
+        zeilen.set(m.massnahmeId, z);
+      }
+      z.anzahl += m.anzahl;
+      if (!gesehen.has(m.massnahmeId)) z.uebungen += 1;
+      gesehen.add(m.massnahmeId);
+      anzahl += m.anzahl;
+      gezaehlt = true;
+    });
+    if (gezaehlt) mitMassnahmen += 1;
+  });
+  const sortiert = [...zeilen.values()].sort((a, b) => b.anzahl - a.anzahl || a.name.localeCompare(b.name, 'de'));
+  const ohneBereich = ({ bereich: _b, ...rest }: UebungsMassnahmeZeile & { bereich: Bereich }): UebungsMassnahmeZeile => rest;
+  return {
+    fw: sortiert.filter((z) => z.bereich === 'FW').map(ohneBereich),
+    rd: sortiert.filter((z) => z.bereich === 'RD').map(ohneBereich),
+    summe: { anzahl, uebungen: mitMassnahmen, verschiedene: zeilen.size },
+  };
+}
+
+/**
+ * Minuten unter Atemschutz, die beim Einschalten vorgeschlagen werden: 20 Minuten wie im Einsatz,
+ * bei einer kürzeren Übung deren Dauer in Fünferschritten (mindestens 5).
+ */
+export function vorschlagAtemschutzMin(dauerMin: number | null): number {
+  if (dauerMin == null || dauerMin >= 20) return 20;
+  return Math.max(5, Math.floor(dauerMin / 5) * 5);
 }

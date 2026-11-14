@@ -189,6 +189,17 @@ export interface Uebung {
   artId: number;
   /** Frei gewähltes Thema, z. B. „Atemschutzstrecke“. */
   thema?: string;
+  /** Ort der Übung aus der Liste „standort“, z. B. Feuerwehrschule. */
+  ortId?: number;
+  /** Die Übung wird als Atemschutzeinsatz gewertet, z. B. Atemschutzstrecke oder Brandcontainer. */
+  atemschutz?: boolean;
+  /** Minuten unter Atemschutz, höchstens so lang wie die Übung. */
+  atemschutzMin?: number;
+  /**
+   * In der Übung durchgeführte Maßnahmen, aus der Liste für Rettungsdienst oder Feuerwehr.
+   * Sie gelten als geübt und haben keine Rechtsgrundlage; im Maßnahmen-Nachweis der Einsätze zählen sie nicht mit.
+   */
+  massnahmen?: MassnahmeEintrag[];
   notiz?: string;
 }
 

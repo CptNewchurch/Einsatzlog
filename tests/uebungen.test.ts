@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { berechneStatistik, verfuegbareJahre } from '../src/domain/stats';
-import { berechneUebungen, uebungMinuten, waehleUebungen } from '../src/domain/uebungen';
+import { berechneUebungen, berechneUebungsMassnahmen, uebungMinuten, vorschlagAtemschutzMin, waehleUebungen } from '../src/domain/uebungen';
 import { MIN, zeitpunkt } from '../src/domain/time';
 import { dienstartVon, hatPlan, type Dienst, type Einsatz, type KatalogEintrag, type Uebung } from '../src/domain/types';
 
@@ -151,5 +151,104 @@ describe('Übungen in der Gesamtstatistik', () => {
 describe('Hilfsgrößen', () => {
   it('Minuten sind ganze Minuten', () => {
     expect(uebungMinuten({ beginn: 0, ende: 90 * MIN + 20_000 })).toBe(90);
+  });
+});
+
+describe('Atemschutz in Übungen', () => {
+  // Zwei Übungen in der Schicht (Nr. 1, 4) und eine im Vorjahr (Nr. 6) werden als Atemschutzeinsatz gewertet.
+  const mitAtemschutz: Uebung[] = uebungen.map((u) =>
+    u.id === 1 ? { ...u, atemschutz: true, atemschutzMin: 25 } : u.id === 4 ? { ...u, atemschutz: true, atemschutzMin: 40 } : u.id === 6 ? { ...u, atemschutz: true, atemschutzMin: 30 } : u,
+  );
+
+  it('zählt nur Übungen, die als Atemschutzeinsatz gewertet werden, mit der Zeit unter Atemschutz', () => {
+    expect(berechneUebungen(dienste, uebungen, alle, katalog).atemschutz).toEqual({ anzahl: 0, minuten: 0 });
+    expect(berechneUebungen(dienste, mitAtemschutz, alle, katalog).atemschutz).toEqual({ anzahl: 2, minuten: 65 });
+  });
+
+  it('folgt Jahr, Dienstart und Bereich des Filters', () => {
+    expect(berechneUebungen(dienste, mitAtemschutz, { ...alle, jahr: null }, katalog).atemschutz).toEqual({ anzahl: 3, minuten: 95 });
+    expect(berechneUebungen(dienste, mitAtemschutz, { ...alle, jahr: 2025 }, katalog).atemschutz).toEqual({ anzahl: 1, minuten: 30 });
+    expect(berechneUebungen(dienste, mitAtemschutz, { ...alle, dienstart: 'regel' }, katalog).atemschutz).toEqual({ anzahl: 1, minuten: 25 });
+    expect(berechneUebungen(dienste, mitAtemschutz, { ...alle, dienstart: 'uebung' }, katalog).atemschutz).toEqual({ anzahl: 1, minuten: 40 });
+    // beide Übungen haben die Art „Atemschutzübung“ (Feuerwehr): im Bereich Rettungsdienst fallen sie weg
+    expect(berechneUebungen(dienste, mitAtemschutz, { ...alle, bereich: 'RD' }, katalog).atemschutz).toEqual({ anzahl: 0, minuten: 0 });
+    expect(berechneUebungen(dienste, mitAtemschutz, { ...alle, bereich: 'FW' }, katalog).atemschutz).toEqual({ anzahl: 2, minuten: 65 });
+  });
+
+  it('ohne Minutenangabe zählt die Übung, aber ohne Zeit', () => {
+    const ohneMinuten = uebungen.map((u) => (u.id === 1 ? { ...u, atemschutz: true } : u));
+    expect(berechneUebungen(dienste, ohneMinuten, alle, katalog).atemschutz).toEqual({ anzahl: 1, minuten: 0 });
+  });
+
+  it('schlägt höchstens 20 Minuten vor, bei kurzen Übungen deren Dauer in Fünferschritten', () => {
+    expect(vorschlagAtemschutzMin(null)).toBe(20);
+    expect(vorschlagAtemschutzMin(210)).toBe(20);
+    expect(vorschlagAtemschutzMin(20)).toBe(20);
+    expect(vorschlagAtemschutzMin(19)).toBe(15);
+    expect(vorschlagAtemschutzMin(12)).toBe(10);
+    expect(vorschlagAtemschutzMin(3)).toBe(5);
+  });
+});
+
+describe('Maßnahmen in Übungen', () => {
+  const liste = new Map<number, KatalogEintrag>([
+    ...katalog,
+    [10, { id: 10, typ: 'fwmassnahme', name: 'Löschangriff im Innenangriff', aktiv: true, gruppe: 'brand' }],
+    [11, { id: 11, typ: 'fwmassnahme', name: 'Erkundung', aktiv: true, gruppe: 'brand' }],
+    [12, { id: 12, typ: 'massnahme', name: 'i.v.-Zugang', aktiv: true, art: 'invasiv' }],
+    [13, { id: 13, typ: 'massnahme', name: 'Epinephrin', aktiv: true, art: 'medikament' }],
+  ]);
+  const mitMassnahmen: Uebung[] = uebungen.map((u) =>
+    u.id === 1
+      ? { ...u, massnahmen: [{ massnahmeId: 10, anzahl: 2 }, { massnahmeId: 12, anzahl: 1 }] }
+      : u.id === 2
+        ? { ...u, massnahmen: [{ massnahmeId: 12, anzahl: 3 }, { massnahmeId: 13, anzahl: 1 }] }
+        : u.id === 4
+          ? { ...u, massnahmen: [{ massnahmeId: 10, anzahl: 1 }, { massnahmeId: 11, anzahl: 1 }] }
+          : u,
+  );
+  const imJahr = waehleUebungen(dienste, mitMassnahmen, alle, liste);
+
+  it('trennt Feuerwehr und Rettungsdienst und zählt Anzahl und Übungen, die häufigste zuerst', () => {
+    const m = berechneUebungsMassnahmen(imJahr, liste);
+    expect(m.fw.map((z) => [z.name, z.anzahl, z.uebungen])).toEqual([
+      ['Löschangriff im Innenangriff', 3, 2],
+      ['Erkundung', 1, 1],
+    ]);
+    expect(m.rd.map((z) => [z.name, z.anzahl, z.uebungen])).toEqual([
+      ['i.v.-Zugang', 4, 2],
+      ['Epinephrin', 1, 1],
+    ]);
+    expect(m.fw[0]).toMatchObject({ gruppe: 'brand' });
+    expect(m.rd[0]).toMatchObject({ art: 'invasiv' });
+    expect(m.summe).toEqual({ anzahl: 9, uebungen: 3, verschiedene: 4 });
+  });
+
+  it('mit Bereich zählen nur Maßnahmen aus der Liste dieses Bereichs', () => {
+    const fw = berechneUebungsMassnahmen(imJahr, liste, 'FW');
+    expect(fw.rd).toEqual([]);
+    expect(fw.summe).toEqual({ anzahl: 4, uebungen: 2, verschiedene: 2 });
+    const rd = berechneUebungsMassnahmen(imJahr, liste, 'RD');
+    expect(rd.fw).toEqual([]);
+    expect(rd.summe).toEqual({ anzahl: 5, uebungen: 2, verschiedene: 2 });
+  });
+
+  it('dieselbe Maßnahme mehrfach in einer Übung zählt die Übung nur einmal', () => {
+    const doppelt: Uebung[] = [{ ...uebungen[0], massnahmen: [{ massnahmeId: 10, anzahl: 1 }, { massnahmeId: 10, anzahl: 2 }] }];
+    const m = berechneUebungsMassnahmen(doppelt, liste);
+    expect(m.fw).toEqual([{ massnahmeId: 10, name: 'Löschangriff im Innenangriff', gruppe: 'brand', anzahl: 3, uebungen: 1 }]);
+    expect(m.summe).toEqual({ anzahl: 3, uebungen: 1, verschiedene: 1 });
+  });
+
+  it('Übungen ohne Maßnahmen und unbekannte Einträge stören nicht', () => {
+    expect(berechneUebungsMassnahmen(uebungen, liste).summe).toEqual({ anzahl: 0, uebungen: 0, verschiedene: 0 });
+    const unbekannt = berechneUebungsMassnahmen([{ ...uebungen[0], massnahmen: [{ massnahmeId: 99, anzahl: 1 }] }], liste);
+    expect(unbekannt.rd.map((z) => z.name)).toEqual(['?']);
+  });
+
+  it('zählt Übungs-Maßnahmen nicht in der Einsatzstatistik mit', () => {
+    const s = berechneStatistik(dienste, [], alle, true, mitMassnahmen);
+    expect(s.anzahl).toBe(0);
+    expect(s.feuerwehr).toEqual({ einsaetze: 0, mig: 0, atemschutz: 0, atemschutzMin: 0 });
   });
 });

@@ -343,6 +343,8 @@ export function berechneMassnahmen(
   einsaetze.forEach((e) => {
     const liste = (e.massnahmen ?? []).filter((m) => katalog.get(m.massnahmeId)?.typ !== 'fwmassnahme');
     if (liste.length > 0) summe.einsaetze += 1;
+    // Dieselbe Maßnahme kann mehrfach eingetragen sein (z. B. zwei Gaben); der Einsatz zählt je Maßnahme nur einmal.
+    const gesehen = new Set<number>();
     liste.forEach((m) => {
       const k = katalog.get(m.massnahmeId);
       let z = zeilen.get(m.massnahmeId);
@@ -361,7 +363,8 @@ export function berechneMassnahmen(
         zeilen.set(m.massnahmeId, z);
       }
       z.anzahl += m.anzahl;
-      z.einsaetze += 1;
+      if (!gesehen.has(m.massnahmeId)) z.einsaetze += 1;
+      gesehen.add(m.massnahmeId);
       summe.anzahl += m.anzahl;
       if (m.durchfuehrung === 'vorab') {
         z.vorab += m.anzahl;
@@ -414,6 +417,7 @@ export function berechneFwMassnahmen(
   einsaetze.forEach((e) => {
     const liste = (e.massnahmen ?? []).filter((m) => katalog.get(m.massnahmeId)?.typ === 'fwmassnahme');
     if (liste.length > 0) mitMassnahmen += 1;
+    const gesehen = new Set<number>();
     liste.forEach((m) => {
       const k = katalog.get(m.massnahmeId);
       let z = zeilen.get(m.massnahmeId);
@@ -422,7 +426,8 @@ export function berechneFwMassnahmen(
         zeilen.set(m.massnahmeId, z);
       }
       z.anzahl += m.anzahl;
-      z.einsaetze += 1;
+      if (!gesehen.has(m.massnahmeId)) z.einsaetze += 1;
+      gesehen.add(m.massnahmeId);
       anzahl += m.anzahl;
     });
   });

@@ -26,7 +26,7 @@ export const KATALOG_INFO: Record<KatalogTyp, KatalogInfo> = {
   kategorie: {
     titel: 'Stichworte',
     neu: 'Neues Stichwort',
-    hinweis: 'Die Kategorie hinter R, N, F, H und ABC, z. B. „Chirurgisch“ oder „Gebäude“.',
+    hinweis: 'Die Kategorie hinter R, N, F, H und ABC, z. B. „Chirurgisch“ oder „Gebäude“. Für die Feuerwehr nach der AAO Bergisch Gladbach vorbelegt.',
   },
   diagnose: {
     titel: 'Verdachtsdiagnosen',
@@ -64,9 +64,10 @@ export const KATALOG_INFO: Record<KatalogTyp, KatalogInfo> = {
     hinweis: 'Die Wachen für deine Regeldienste.',
   },
   standort: {
-    titel: 'Standorte für Zusatz- und Übungsdienste',
+    titel: 'Standorte und Übungsorte',
     neu: 'Neuer Standort',
-    hinweis: 'Stadt, Organisation oder Ausbildungsstätte, in der du einen Zusatz- oder Übungsdienst leistest.',
+    hinweis:
+      'Stadt, Organisation oder Ausbildungsstätte, in der du einen Zusatz- oder Übungsdienst leistest. Auch der Ort einer einzelnen Übung kommt aus dieser Liste, z. B. Feuerwehrschule oder Übungsgelände.',
   },
   uebungsart: {
     titel: 'Übungsarten',

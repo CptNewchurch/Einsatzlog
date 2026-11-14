@@ -14,7 +14,7 @@ import {
   zeitpunkt,
   datumVorTagen,
 } from '../domain/time';
-import type { Dienst } from '../domain/types';
+import { DIENSTART_NAME, type Dienst, type Dienstart } from '../domain/types';
 import { dienstSaldo } from '../domain/zeiten';
 import { navigate, zurueck } from '../router';
 import { dienstTitel, useDaten } from '../state/daten';
@@ -276,8 +276,25 @@ function Formular({ bestehend, zusatz, uebungsdienst, regelBeginn, zeitenOffen }
   const heute = datumVorTagen(Date.now(), 0);
   const gestern = datumVorTagen(Date.now(), 1);
 
+  // Die Art eines Dienstes steht beim Anlegen fest; ein Wechsel öffnet das passende leere Formular.
+  const gewaehlteDienstart: Dienstart = uebungsdienst ? 'uebung' : zusatz ? 'zusatz' : 'regel';
+  const NEU_PFAD: Record<Dienstart, string> = { regel: '/dienst/neu', zusatz: '/dienst/neu/zusatz', uebung: '/dienst/neu/uebung' };
+
   return (
     <Seite titel={titel} zurueckZu={bestehend ? `/dienst/${bestehend.id}` : '/'} fuss={fuss}>
+      {neu && (
+        <Segment<Dienstart>
+          label="Art des Dienstes"
+          klein
+          wert={gewaehlteDienstart}
+          onChange={(a) => navigate(NEU_PFAD[a], true)}
+          optionen={[
+            { wert: 'regel', label: DIENSTART_NAME.regel },
+            { wert: 'zusatz', label: DIENSTART_NAME.zusatz },
+            { wert: 'uebung', label: DIENSTART_NAME.uebung, ton: 'ue' },
+          ]}
+        />
+      )}
       {zusatz && neu && (
         <Meldung art="info">
           Zusatzdienst ohne Vorbelegung. Beginn und Ende bilden den Rahmen für die Einsätze darin. Er zählt nicht zu deinen Über- und Minusstunden.
