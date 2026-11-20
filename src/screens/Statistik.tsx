@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  berechneAlarmstufen,
   berechneFwMassnahmen,
   berechneMassnahmen,
   berechneStatistik,
@@ -9,6 +10,7 @@ import {
   type MassnahmenZeile,
   type StatFilter,
 } from '../domain/stats';
+import { stufeKraefte, stufeText } from '../domain/alarmstufe';
 import { berechneUebungen, berechneUebungsMassnahmen, waehleUebungen, type UebungsMassnahmeZeile } from '../domain/uebungen';
 import { berechneTriage } from '../domain/triageStats';
 import { stichwortText, TYP_INFO } from '../domain/stichwort';
@@ -178,6 +180,7 @@ export function Statistik() {
   const massn = useMemo(() => berechneMassnahmen(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
   const fwMassn = useMemo(() => berechneFwMassnahmen(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
   const triage = useMemo(() => berechneTriage(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
+  const stufen = useMemo(() => berechneAlarmstufen(gewaehlt, katalogMap), [gewaehlt, katalogMap]);
 
   if (dienste.length === 0 && einsaetze.length === 0 && uebungen.length === 0) {
     return (
@@ -200,6 +203,8 @@ export function Statistik() {
   const stichwortName = (typ: Parameters<typeof stichwortText>[0], kategorieId: number) =>
     stichwortText(typ, katalogName(daten, kategorieId));
   const regelDienste = dienstart === 'alle' || dienstart === 'regel';
+  // Die Stufen bis zur höchsten vorkommenden, auch mit Lücken dazwischen; höhere ohne Einsatz bleiben weg.
+  const stufenZeilen = stufen.zeilen.filter((st) => st.stufe <= (stufen.hoechste?.stufe ?? 0));
   // Atemschutz zählt aus Feuerwehr-Einsätzen und aus Übungen, die als Atemschutzeinsatz gewertet werden.
   const asEinsatz = { anzahl: s.feuerwehr.atemschutz, minuten: s.feuerwehr.atemschutzMin };
   const asUebung = ueb.atemschutz;
@@ -447,6 +452,48 @@ export function Statistik() {
                 </>
               ) : (
                 <p className="hinweis">In {zeitraum} sind keine Maßnahmen auf Befehl erfasst.</p>
+              )}
+            </Abschnitt>
+          )}
+
+          {bereich !== 'RD' && stufen.hoechste != null && (
+            <Abschnitt titel="Alarmstufen">
+              <KpiRaster>
+                <Kpi
+                  wert={String(stufen.hoechste.stufe)}
+                  label="Höchste Alarmstufe"
+                  ton="fw"
+                  zusatz={`${stufeKraefte(stufen.hoechste.stufe)} · ${stufen.hoechste.n}× in ${zeitraum}`}
+                />
+                <Kpi
+                  wert={fmtZahl(stufen.hoeher)}
+                  label="Höher als in der AAO"
+                  ton="fw"
+                  zusatz={`${prozent(stufen.hoeher, stufen.mitStufe)} der Einsätze`}
+                />
+              </KpiRaster>
+              <ChartKarte
+                titel="Einsätze nach Alarmstufe"
+                untertitel={`${stufen.mitStufe} Feuerwehr-${stufen.mitStufe === 1 ? 'Einsatz' : 'Einsätze'}`}
+                tabelle={{
+                  kopf: ['Stufe', 'Kräfte', 'Einsätze', 'Zeit', 'Median'],
+                  zeilen: stufenZeilen.map((st) => [stufeText(st.stufe), stufeKraefte(st.stufe), st.n, fmtDauer(st.minuten), minText(st.medianMin)]),
+                }}
+              >
+                <Balken zeilen={stufenZeilen.map((st) => ({ label: stufeText(st.stufe), wert: st.n, ton: 'fw' as const }))} />
+                <p className="hinweis">
+                  Stufe 0 ist ein HLF, ab Stufe 1 zählt die Zahl der Staffeln. Einsätze ohne eingetragene Stufe zählen mit der Stufe, die die AAO für das Stichwort vorsieht.
+                </p>
+              </ChartKarte>
+              {stufen.niedriger > 0 && (
+                <p className="hinweis">
+                  Niedriger als in der AAO: {stufen.niedriger} {stufen.niedriger === 1 ? 'Einsatz' : 'Einsätze'}.
+                </p>
+              )}
+              {stufen.ohneStufe > 0 && (
+                <p className="hinweis">
+                  Nicht enthalten: {stufen.ohneStufe} {stufen.ohneStufe === 1 ? 'Einsatz' : 'Einsätze'} mit einem Stichwort, das die AAO nicht kennt, und ohne eingetragene Stufe.
+                </p>
               )}
             </Abschnitt>
           )}

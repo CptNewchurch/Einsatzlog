@@ -1,3 +1,4 @@
+import { stufeText, stufeVon } from '../domain/alarmstufe';
 import { kraefteText } from '../domain/stichwort';
 import { fmtDatumKurz, fmtDauer, fmtZeit, minutenZwischen } from '../domain/time';
 import { bewertungVon, NACA_INFO } from '../domain/triage';
@@ -13,6 +14,7 @@ interface Props {
 export function EinsatzZeile({ einsatz: e, mitDatum }: Props) {
   const d = useDaten();
   const bereich = bereichVon(e.typ).toLowerCase();
+  const stufe = stufeVon(e, katalogName(d, e.kategorieId)).stufe;
   const dauer = minutenZwischen(e.alarm, e.status1);
   const marken: string[] = [];
   if (e.ausgang) marken.push(AUSGANG_INFO[e.ausgang].kurz);
@@ -36,6 +38,7 @@ export function EinsatzZeile({ einsatz: e, mitDatum }: Props) {
         {e.kraefteRtw != null && e.kraefteNef != null && (
           <span className="einsatzzeile__kraefte zahl">{kraefteText(e.kraefteRtw, e.kraefteNef)}</span>
         )}
+        {stufe != null && <span className="einsatzzeile__kraefte zahl">{stufeText(stufe)}</span>}
       </div>
       <div className="einsatzzeile__meta zahl">
         {mitDatum && `${fmtDatumKurz(e.alarm)} · `}

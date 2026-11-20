@@ -244,6 +244,11 @@ export interface Einsatz {
   massnahmen?: MassnahmeEintrag[];
   atemschutz?: boolean;
   atemschutzMin?: number;
+  /**
+   * Alarmstufe der AAO (0–6), nur bei Feuerwehr-Einsätzen. Das Formular belegt sie nach dem Stichwort vor;
+   * wurde sie erhöht, steht hier die höchste Stufe. Ohne Eintrag gilt die Stufe, die die AAO für das Stichwort vorsieht.
+   */
+  alarmstufe?: number;
 }
 
 export type ThemeWahl = 'system' | 'light' | 'dark';

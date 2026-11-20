@@ -14,6 +14,7 @@ import {
   type Typ,
   type Uebung,
 } from './types';
+import { ALARMSTUFEN, stufeVon } from './alarmstufe';
 import { berechneDienstZeiten, dienstSaldo } from './zeiten';
 
 // Einsätze zählen nach ihrer Alarmierung, Dienste und Dienstzeiten nach dem Dienstbeginn.
@@ -441,4 +442,66 @@ export function berechneFwMassnahmen(
     .filter((g) => g.zeilen.length > 0)
     .sort((a, b) => b.anzahl - a.anzahl);
   return { gruppen, summe: { anzahl, einsaetze: mitMassnahmen, verschiedene: zeilen.size } };
+}
+
+/* ---------- Alarmstufen (Feuerwehr) ---------- */
+
+export interface StufenZeile {
+  stufe: number;
+  n: number;
+  /** Summe der Einsatzzeit in Minuten. */
+  minuten: number;
+  medianMin: number | null;
+}
+
+export interface AlarmstufenStatistik {
+  /** Stufe 0 bis 6, auch wenn es zu einer Stufe keinen Einsatz gibt. */
+  zeilen: StufenZeile[];
+  /** Feuerwehr-Einsätze mit bekannter Stufe. */
+  mitStufe: number;
+  /** Feuerwehr-Einsätze ohne Stufe: ein Stichwort, das die AAO nicht kennt, und keine Stufe eingetragen. */
+  ohneStufe: number;
+  /** Einsätze mit einer höheren bzw. niedrigeren Stufe, als die AAO für das Stichwort vorsieht. */
+  hoeher: number;
+  niedriger: number;
+  /** Die höchste vorkommende Stufe und wie oft sie vorkam. */
+  hoechste: { stufe: number; n: number } | null;
+}
+
+/**
+ * Feuerwehr-Einsätze nach Alarmstufe. Eingetragen ist die Stufe, die der Einsatz hatte; bei Einsätzen aus der Zeit
+ * vor der Alarmstufe gilt die Stufe, die die AAO für das Stichwort vorsieht. Rettungsdiensteinsätze zählen nicht mit.
+ */
+export function berechneAlarmstufen(
+  einsaetze: readonly Einsatz[],
+  katalog: ReadonlyMap<number, KatalogEintrag>,
+): AlarmstufenStatistik {
+  const dauern = new Map<number, number[]>(ALARMSTUFEN.map((s) => [s, []]));
+  let ohneStufe = 0;
+  let hoeher = 0;
+  let niedriger = 0;
+  einsaetze.forEach((e) => {
+    if (bereichVon(e.typ) !== 'FW') return;
+    const { stufe, aao } = stufeVon(e, katalog.get(e.kategorieId)?.name);
+    if (stufe == null) {
+      ohneStufe += 1;
+      return;
+    }
+    dauern.get(stufe)!.push(einsatzMinuten(e));
+    if (aao != null && stufe > aao) hoeher += 1;
+    else if (aao != null && stufe < aao) niedriger += 1;
+  });
+  const zeilen = ALARMSTUFEN.map((stufe): StufenZeile => {
+    const liste = dauern.get(stufe)!;
+    return { stufe, n: liste.length, minuten: liste.reduce((a, b) => a + b, 0), medianMin: median(liste) };
+  });
+  const hoechsteZeile = [...zeilen].reverse().find((z) => z.n > 0);
+  return {
+    zeilen,
+    mitStufe: zeilen.reduce((a, z) => a + z.n, 0),
+    ohneStufe,
+    hoeher,
+    niedriger,
+    hoechste: hoechsteZeile ? { stufe: hoechsteZeile.stufe, n: hoechsteZeile.n } : null,
+  };
 }

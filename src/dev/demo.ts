@@ -4,6 +4,7 @@ import { db } from '../db/db';
 import { speichereEinstellungen } from '../db/einstellungen';
 import { sorgeFuerStartlisten } from '../db/seed';
 import { MIN, STUNDE, zeitpunkt } from '../domain/time';
+import { aaoStufe, MAX_ALARMSTUFE } from '../domain/alarmstufe';
 import { bewertungVorschlag } from '../domain/triage';
 import type { Ausgang, Dienst, Durchfuehrung, Einsatz, KatalogEintrag, MassnahmeEintrag, Typ, Uebung } from '../domain/types';
 
@@ -212,6 +213,9 @@ export async function ladeDemodaten(): Promise<void> {
           }
         }
         if (r() > 0.85) e.nachalarmiert = true;
+        // Alarmstufe: meist wie in der AAO, bei Nachalarmierung eine Stufe höher; manchmal gar nicht eingetragen.
+        const aao = aaoStufe(typ, katalog.find((k) => k.id === e.kategorieId)?.name ?? '', e.mig);
+        if (aao != null && r() > 0.2) e.alarmstufe = Math.min(MAX_ALARMSTUFE, aao + (e.nachalarmiert ? 1 : 0));
         if (typ === 'F' && !e.mig && r() > 0.7) e.ausgang = 'fehleinsatz';
         // Maßnahmen auf Befehl: nach Art des Einsatzes.
         const namen: string[] =

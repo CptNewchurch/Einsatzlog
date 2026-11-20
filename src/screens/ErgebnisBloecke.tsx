@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   AUSGAENGE_RD,
   AUSGANG_INFO,
@@ -11,6 +12,8 @@ import { NACA_INFO, type BewertungsVorschlag } from '../domain/triage';
 import { Chip, ChipReihe, Feld, Knopf, Meldung } from '../ui/controls';
 import { KatalogAuswahl } from '../ui/katalogwahl';
 import type { KatalogListe } from '../ui/katalogListen';
+import { useToast } from '../ui/overlays';
+import { NacaBeispiele } from './NacaBeispiele';
 
 /* Bausteine für „Ergebnis und Befund“ und „Alarmierung bewerten“ im Einsatzformular. */
 
@@ -51,16 +54,31 @@ export function AusgangWahl({ wert, onChange }: { wert: Ausgang | null; onChange
 }
 
 export function NacaWahl({ wert, onChange }: { wert: number | null; onChange: (n: number | null) => void }) {
+  const [beispiele, setBeispiele] = useState(false);
+  const toast = useToast();
   const info = wert != null ? NACA_INFO[wert - 1] : undefined;
   return (
-    <Feld label="NACA" hinweis={info ? `${info.roemisch}: ${info.kurz}` : 'Von I (geringfügig) bis VII (Tod).'}>
+    <Feld label="NACA" hinweis={info ? `${info.roemisch}: ${info.kurz}` : 'Von I (geringfügig) bis VII (Tod). „Beispiele“ hilft bei der Einordnung.'}>
       <ChipReihe label="NACA-Score">
         {NACA_INFO.map((n) => (
           <Chip key={n.wert} klein aktiv={wert === n.wert} onClick={() => onChange(wert === n.wert ? null : n.wert)} titel={`${n.roemisch}: ${n.kurz}`}>
             {n.roemisch}
           </Chip>
         ))}
+        <Chip klein gestrichelt onClick={() => setBeispiele(true)} titel="Krankheitsbilder und Verletzungen je NACA-Wert nachschlagen">
+          Beispiele
+        </Chip>
       </ChipReihe>
+      <NacaBeispiele
+        offen={beispiele}
+        onClose={() => setBeispiele(false)}
+        wert={wert}
+        onWaehle={(naca) => {
+          onChange(naca);
+          setBeispiele(false);
+          toast.zeige(`NACA ${NACA_INFO[naca - 1].roemisch} übernommen`);
+        }}
+      />
     </Feld>
   );
 }

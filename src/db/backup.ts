@@ -1,6 +1,7 @@
 import { db } from './db';
 import { mergeEinstellungen, speichereEinstellungen, spiegleTheme } from './einstellungen';
 import { sorgeFuerStartlisten } from './seed';
+import { istAlarmstufe } from '../domain/alarmstufe';
 import { TYPEN, type Dienst, type Einsatz, type Einstellungen, type KatalogEintrag, type Uebung } from '../domain/types';
 
 export const BACKUP_APP = 'einsatzlog';
@@ -119,7 +120,9 @@ export function pruefeBackup(roh: unknown): BackupDatei {
       !istZahl(e.alarm) ||
       !istZahl(e.status1) ||
       e.status1 <= e.alarm ||
-      (e.status2 != null && (!istZahl(e.status2) || e.status2 < e.status1))
+      (e.status2 != null && (!istZahl(e.status2) || e.status2 < e.status1)) ||
+      // Die Alarmstufe kam später dazu; ältere Sicherungen haben sie nicht.
+      (e.alarmstufe != null && !istAlarmstufe(e.alarmstufe))
     ) {
       throw new BackupFehler(`Einsatz Nr. ${i + 1} in der Sicherung ist ungültig.`);
     }

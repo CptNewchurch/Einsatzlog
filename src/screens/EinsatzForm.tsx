@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loescheEinsatz, speichereEinsatz, verlaengereDienst } from '../db/speichern';
+import { aaoStufe, ALARMSTUFEN, istAlarmstufe, stufeKraefte, stufeText } from '../domain/alarmstufe';
 import { kategorieNutzungFuerTyp, sortiereNachNutzung } from '../domain/katalogLogik';
 import { kraefteText, standardKraefte, stichwortText } from '../domain/stichwort';
 import {
@@ -49,6 +50,8 @@ interface FormState {
   typ: Typ | null;
   kategorie: number[];
   mig: boolean;
+  /** Gewählte Alarmstufe (Feuerwehr); ohne Wahl gilt die Stufe, die die AAO für das Stichwort vorsieht. */
+  alarmstufe: number | null;
   rtw: number;
   nef: number;
   alarm: string;
@@ -84,6 +87,7 @@ function neuerEntwurf(dienst: Dienst): FormState {
     typ: null,
     kategorie: [],
     mig: false,
+    alarmstufe: null,
     rtw: 1,
     nef: 0,
     alarm: '',
@@ -121,6 +125,7 @@ function ausEinsatz(e: Einsatz): FormState {
     typ: e.typ,
     kategorie: [e.kategorieId],
     mig: !!e.mig,
+    alarmstufe: istAlarmstufe(e.alarmstufe) ? e.alarmstufe : null,
     rtw: e.kraefteRtw ?? 1,
     nef: e.kraefteNef ?? 0,
     alarm: fmtZeit(e.alarm),
@@ -392,6 +397,11 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
     return (daten.einsaetzeNachDienst.get(f.dienstId) ?? []).find((e) => e.id !== bestehend?.id && e.alarm < status1Ms && alarmAuf < e.status1);
   }, [alarmAuf, status1Ms, daten.einsaetzeNachDienst, f.dienstId, bestehend?.id]);
 
+  /* ---- Alarmstufe (Feuerwehr): Vorgabe der AAO, solange nichts anderes gewählt ist ---- */
+  const kategorieName = typ && f.kategorie[0] != null ? katalogName(daten, f.kategorie[0]) : undefined;
+  const aaoVorgabe = typ && bereich === 'FW' && kategorieName ? aaoStufe(typ, kategorieName, f.mig) : undefined;
+  const stufe = bereich === 'FW' ? (f.alarmstufe ?? aaoVorgabe) : undefined;
+
   /* ---- Aktionen ---- */
   const waehleTyp = (t: Typ) => {
     if (t === f.typ) return;
@@ -407,6 +417,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       typ: t,
       kategorie: bleibt,
       mig: t === 'F' ? f.mig : false,
+      alarmstufe: null,
       rtw: k?.rtw ?? 1,
       nef: k?.nef ?? 0,
       // Zwischen Rettungsdienst und Feuerwehr passen nur Fehleinsätze zu beiden.
@@ -465,6 +476,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       massnahmen: f.massnahmen.length > 0 ? f.massnahmen : undefined,
       atemschutz: f.atemschutz ? true : undefined,
       atemschutzMin: f.atemschutz ? f.atemschutzMin : undefined,
+      alarmstufe: !rd && stufe != null ? stufe : undefined,
     });
     try {
       await speichereEinsatz(einsatz);
@@ -563,7 +575,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
             vorschlaege={kategorieVorschlaege}
             alle={kategorieVorschlaege}
             ausgewaehlt={f.kategorie}
-            onChange={(ids) => set({ kategorie: ids })}
+            onChange={(ids) => set({ kategorie: ids, alarmstufe: ids[0] === f.kategorie[0] ? f.alarmstufe : null })}
             neuExtra={{ typen: [typ] }}
             ton={bereich === 'RD' ? 'rd' : 'fw'}
             fehler={versucht ? fehler.kategorie : undefined}
@@ -574,6 +586,25 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
         ) : null}
 
         {typ === 'F' && <Toggle an={f.mig} onChange={(mig) => set({ mig })} label="MIG – Menschenleben in Gefahr" />}
+
+        {bereich === 'FW' && f.kategorie[0] != null && (
+          <Feld
+            label="Alarmstufe"
+            hinweis={
+              aaoVorgabe != null
+                ? `Laut AAO Stufe ${aaoVorgabe} (${stufeKraefte(aaoVorgabe)}). Wurde sie erhöht, wähle die höchste Stufe.`
+                : 'Dieses Stichwort steht nicht in der AAO. Wähle die Stufe, wenn du sie kennst.'
+            }
+          >
+            <Segment
+              wert={stufe != null ? String(stufe) : undefined}
+              label="Alarmstufe"
+              klein
+              onChange={(w) => set({ alarmstufe: Number(w) })}
+              optionen={ALARMSTUFEN.map((s) => ({ wert: String(s), label: String(s), ton: 'fw' as const }))}
+            />
+          </Feld>
+        )}
 
         {bereich === 'RD' && (
           <Feld label="Initialer Kräfteansatz" hinweis="Was bei der Alarmierung vorgesehen war.">
@@ -587,6 +618,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
           <p className="vorschau" aria-live="polite">
             Stichwort <strong className="zahl">{vorschau}</strong>
             {bereich === 'RD' && <span className="vorschau__kraefte zahl">{kraefteText(f.rtw, f.nef)}</span>}
+            {stufe != null && <span className="vorschau__kraefte zahl">{stufeText(stufe)}</span>}
           </p>
         )}
       </Abschnitt>

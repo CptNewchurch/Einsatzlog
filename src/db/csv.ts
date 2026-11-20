@@ -1,3 +1,4 @@
+import { stufeVon } from '../domain/alarmstufe';
 import { berechneDienstZeiten, dienstSaldo } from '../domain/zeiten';
 import { BEREICH_NAME, stichwortText } from '../domain/stichwort';
 import { fmtDatum, fmtZeit, MIN } from '../domain/time';
@@ -45,7 +46,7 @@ export function erzeugeEinsaetzeCsv(
   const dienstMap = new Map(dienste.map((d) => [d.id!, d]));
   const kopf = [
     'Datum', 'Alarmierung', 'Status 1', 'Status 2', 'Einsatzdauer (min)', 'Rückfahrt (min)',
-    'Typ', 'Stichwort', 'MIG', 'Kräfteansatz', 'Dienst', 'Dienstart', 'Wache / Standort', 'Fahrzeug', 'Rolle',
+    'Typ', 'Stichwort', 'MIG', 'Kräfteansatz', 'Alarmstufe', 'Dienst', 'Dienstart', 'Wache / Standort', 'Fahrzeug', 'Rolle',
     'Nachalarmiert', 'Nachforderungen', 'Ergebnis', 'NACA', 'NACA-Gruppe', 'Verdachtsdiagnose', 'Laut Leitstelle',
     'Bewertung Alarmierung', 'Altersgruppe', 'Notarzt vor Ort',
     'Maßnahmen', 'Atemschutz', 'Atemschutz (min)', 'Ort', 'Tags', 'Notiz',
@@ -65,6 +66,8 @@ export function erzeugeEinsaetzeCsv(
         stichwortText(e.typ, name(e.kategorieId), e.mig),
         e.mig ? true : '',
         e.kraefteRtw != null && e.kraefteNef != null ? `R${e.kraefteRtw}N${e.kraefteNef}` : '',
+        // Wie in der Statistik: die eingetragene Stufe, sonst die der AAO für das Stichwort.
+        stufeVon(e, katalog.get(e.kategorieId)?.name).stufe ?? '',
         d ? fmtDatum(d.beginn) : '',
         d ? DIENSTART_NAME[dienstartVon(d)] : '',
         d ? name(d.wacheId) : '',

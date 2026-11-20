@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { NACA_BEISPIELE } from '../domain/nacaBeispiele';
 import { Abschnitt, Knopf } from '../ui/controls';
 import { useToast } from '../ui/overlays';
 import { Seite } from '../ui/seite';
@@ -11,6 +12,9 @@ const UPDATE_TEXT = {
   offline: 'Keine Verbindung. Versuche es noch einmal, wenn du Netz hast.',
   'nicht-moeglich': 'Die Suche gibt es nur in der installierten App.',
 } as const;
+
+const NACA_ANZAHL = NACA_BEISPIELE.length;
+const NACA_LIT = NACA_BEISPIELE.filter((b) => b.lit).length;
 
 export function Ueber() {
   const toast = useToast();
@@ -54,9 +58,18 @@ export function Ueber() {
         </ul>
       </Abschnitt>
 
+      <Abschnitt titel="NACA-Beispiele">
+        <p className="text">
+          Welches Krankheitsbild zu welchem NACA-Wert gehört, ist nirgends amtlich festgelegt: Der Wert beschreibt den Zustand des Patienten, nicht die Diagnose allein. Die Tabelle beim NACA-Feld („Beispiele“) ist deshalb ein Richtwert. Von den <span className="zahl">{NACA_ANZAHL}</span> Einträgen sind <span className="zahl">{NACA_LIT}</span> mit „Lit.“ gekennzeichnet, sie stehen so in der Fachliteratur (DocCheck Flexikon, Wikipedia). Die übrigen sind aus den Definitionen der Stufen und aus Einstufungen nach Schwere abgeleitet (Notarztindikationskatalog Hessen 2024, Notarztindikationen aus Innsbruck, Schutz und Rettung Zürich). Die Einstufung bleibt deine fachliche Entscheidung.
+        </p>
+      </Abschnitt>
+
       <Abschnitt titel="Stichworte der Feuerwehr">
         <p className="text">
           Die Stichworte für Feuer, Hilfeleistung und ABC sind nach der AAO der Berufsfeuerwehr Bergisch Gladbach (Version 5.2) vorbelegt. Die „MiG“-Zeilen der AAO erfasst du über den Schalter „MIG“ beim Feuer-Stichwort. Unter Mehr → Listen pflegen kannst du Stichworte umbenennen, ausblenden oder ergänzen.
+        </p>
+        <p className="text">
+          Zu jedem Stichwort schlägt die App die Alarmstufe der AAO vor: Stufe 0 ist ein HLF, ab Stufe 1 zählt die Zahl der Staffeln, Stufe 6 sind sechs Staffeln. Wurde nachalarmiert, wählst du die höchste Stufe. Die Statistik zählt die Einsätze je Stufe und zeigt, wie oft sie höher lag als in der AAO.
         </p>
       </Abschnitt>
 

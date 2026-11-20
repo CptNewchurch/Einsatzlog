@@ -1,14 +1,29 @@
 import { AUSGANG_INFO, type AlarmBewertung, type Ausgang, type Einsatz, type Typ } from './types';
 
-/** NACA-Score I–VII mit kurzer Erläuterung für die Auswahl. */
-export const NACA_INFO: { wert: number; roemisch: string; kurz: string }[] = [
-  { wert: 1, roemisch: 'I', kurz: 'Geringfügige Störung' },
-  { wert: 2, roemisch: 'II', kurz: 'Leichte Störung, ambulante Abklärung' },
-  { wert: 3, roemisch: 'III', kurz: 'Mäßig schwer, stationäre Behandlung' },
-  { wert: 4, roemisch: 'IV', kurz: 'Schwer, Lebensgefahr möglich' },
-  { wert: 5, roemisch: 'V', kurz: 'Akute Lebensgefahr' },
-  { wert: 6, roemisch: 'VI', kurz: 'Reanimation' },
-  { wert: 7, roemisch: 'VII', kurz: 'Tod' },
+/** NACA-Score I–VII mit kurzer Erläuterung für die Auswahl (`lang` für die Beispieltabelle). */
+export const NACA_INFO: { wert: number; roemisch: string; kurz: string; lang: string }[] = [
+  { wert: 1, roemisch: 'I', kurz: 'Geringfügige Störung', lang: 'Keine ärztliche Intervention nötig.' },
+  {
+    wert: 2,
+    roemisch: 'II',
+    kurz: 'Leichte Störung, ambulante Abklärung',
+    lang: 'Ambulante ärztliche Abklärung, meist ohne Notarztmaßnahmen.',
+  },
+  {
+    wert: 3,
+    roemisch: 'III',
+    kurz: 'Mäßig schwer, stationäre Behandlung',
+    lang: 'Nicht lebensbedrohlich, aber stationäre Behandlung nötig, oft mit Notarztmaßnahmen vor Ort.',
+  },
+  {
+    wert: 4,
+    roemisch: 'IV',
+    kurz: 'Schwer, Lebensgefahr möglich',
+    lang: 'Lebensgefahr kurzfristig nicht auszuschließen: Notarzt, Schockraum.',
+  },
+  { wert: 5, roemisch: 'V', kurz: 'Akute Lebensgefahr', lang: 'Transport in Reanimationsbereitschaft.' },
+  { wert: 6, roemisch: 'VI', kurz: 'Reanimation', lang: 'Atem- und/oder Kreislaufstillstand.' },
+  { wert: 7, roemisch: 'VII', kurz: 'Tod', lang: 'Todesfeststellung.' },
 ];
 
 /** Gruppen für die Auswertung: wie schwer waren die Patienten. */
