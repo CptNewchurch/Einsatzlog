@@ -88,23 +88,64 @@ export const DURCHFUEHRUNG_INFO: Record<Durchfuehrung, { kurz: string; lang: str
 
 /**
  * Wie ein Einsatz ausging: was tatsächlich geschah, nicht was alarmiert wurde.
+ * „transportMitNotarzt“ und „transportOhneNotarzt“ sind Transporte, bei denen ein Notarzt vor Ort
+ * behandelt hat: im ersten Fall begleitet er den Patienten in die Klinik, im zweiten nicht.
+ * „transport“ ist der Transport ohne Notarzt (oder ohne nähere Angabe, so auch in älteren Einsätzen).
+ * Alle drei unterscheiden sich von „ambulant“, bei dem der Patient gar nicht transportiert wird.
  * „transportdienst“ und „hilfeleistung“ zählen als zu hohe Alarmierung (Übertriage),
  * weil dafür kein Rettungsmittel nötig gewesen wäre.
  */
-export type Ausgang = 'transport' | 'ambulant' | 'abgelehnt' | 'verstorben' | 'transportdienst' | 'hilfeleistung' | 'fehleinsatz';
+export type Ausgang =
+  | 'transport'
+  | 'transportMitNotarzt'
+  | 'transportOhneNotarzt'
+  | 'ambulant'
+  | 'abgelehnt'
+  | 'verstorben'
+  | 'transportdienst'
+  | 'hilfeleistung'
+  | 'fehleinsatz';
 
 /** Auswahl im Rettungsdienst, in dieser Reihenfolge. */
-export const AUSGAENGE_RD: readonly Ausgang[] = ['transport', 'ambulant', 'abgelehnt', 'verstorben', 'transportdienst', 'hilfeleistung', 'fehleinsatz'];
+export const AUSGAENGE_RD: readonly Ausgang[] = [
+  'transport',
+  'transportMitNotarzt',
+  'transportOhneNotarzt',
+  'ambulant',
+  'abgelehnt',
+  'verstorben',
+  'transportdienst',
+  'hilfeleistung',
+  'fehleinsatz',
+];
 
 export interface AusgangInfo {
   kurz: string;
   lang: string;
   /** Zählt als zu hohe Alarmierung. */
   uebertriage: boolean;
+  /** Setzt voraus, dass ein Notarzt vor Ort war („Notarzt vor Ort“ = Ja). */
+  notarztVorOrt?: boolean;
 }
 
 export const AUSGANG_INFO: Record<Ausgang, AusgangInfo> = {
-  transport: { kurz: 'Transport', lang: 'Der Patient wurde in eine Klinik transportiert.', uebertriage: false },
+  transport: {
+    kurz: 'Transport',
+    lang: 'Der Patient wurde in eine Klinik transportiert. War ein Notarzt vor Ort, wähle „Transport mit NA“ oder „Transport ohne NA“.',
+    uebertriage: false,
+  },
+  transportMitNotarzt: {
+    kurz: 'Transport mit NA',
+    lang: 'Der Notarzt hat vor Ort behandelt und begleitet den Transport in die Klinik.',
+    uebertriage: false,
+    notarztVorOrt: true,
+  },
+  transportOhneNotarzt: {
+    kurz: 'Transport ohne NA',
+    lang: 'Der Notarzt hat vor Ort behandelt, begleitet den Transport aber nicht. Der Patient wurde in eine Klinik transportiert.',
+    uebertriage: false,
+    notarztVorOrt: true,
+  },
   ambulant: { kurz: 'Ambulant versorgt', lang: 'Vor Ort versorgt, ein Transport war nicht nötig.', uebertriage: false },
   abgelehnt: { kurz: 'Lehnt ab', lang: 'Der Patient lehnt Transport oder Behandlung ab.', uebertriage: false },
   verstorben: { kurz: 'Verstorben', lang: 'Tod festgestellt oder Reanimation erfolglos beendet.', uebertriage: false },
@@ -112,6 +153,9 @@ export const AUSGANG_INFO: Record<Ausgang, AusgangInfo> = {
   hilfeleistung: { kurz: 'Hilfeleistung', lang: 'Keine medizinische Notlage, z. B. Aufstehhilfe oder Tragehilfe.', uebertriage: true },
   fehleinsatz: { kurz: 'Fehleinsatz', lang: 'Kein Patient oder keine Einsatzstelle angetroffen, Fehlalarm oder abgebrochen.', uebertriage: false },
 };
+
+/** Setzt das Ergebnis einen Notarzt vor Ort voraus? Dann muss „Notarzt vor Ort“ auf Ja stehen. */
+export const ausgangBrauchtNotarzt = (a: Ausgang | null | undefined): boolean => a != null && AUSGANG_INFO[a].notarztVorOrt === true;
 
 /** Eigene Einschätzung, ob das Stichwort zum Befund vor Ort passte. */
 export type AlarmBewertung = 'passend' | 'hoch' | 'niedrig';

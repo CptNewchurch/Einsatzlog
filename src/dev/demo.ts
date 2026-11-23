@@ -173,13 +173,16 @@ export async function ladeDemodaten(): Promise<void> {
         e.notarztVorOrt = typ === 'N' || r() > 0.8;
 
         // Ergebnis und Befund: meist Transport, dazwischen ambulante Fälle, Ablehnungen und Fehlalarme.
-        const ausgang: Ausgang = wahl(['transport', 'transport', 'transport', 'transport', 'transport', 'ambulant', 'ambulant', 'abgelehnt', 'verstorben', 'transportdienst', 'hilfeleistung', 'fehleinsatz'] as const);
+        // War ein Notarzt vor Ort, wird aus einem Transport einer mit oder ohne Notarztbegleitung.
+        const ergebnisse: readonly Ausgang[] = ['transport', 'transport', 'transport', 'transport', 'transport', 'ambulant', 'ambulant', 'abgelehnt', 'verstorben', 'transportdienst', 'hilfeleistung', 'fehleinsatz'];
+        const mitNotarzt = ergebnisse.map((a, i): Ausgang => (a === 'transport' ? (i % 2 === 0 ? 'transportMitNotarzt' : 'transportOhneNotarzt') : a));
+        const ausgang: Ausgang = wahl(e.notarztVorOrt ? mitNotarzt : ergebnisse);
         e.ausgang = ausgang;
         const { befunde, verdacht } = BEFUNDE[fach];
         let befund = wahl(befunde);
         let leitstelle: string | undefined = r() < (typ === 'N' ? 0.75 : 0.3) ? wahl(verdacht) : undefined;
         if (ausgang !== 'fehleinsatz') {
-          e.naca = ausgang === 'verstorben' ? 7 : ausgang === 'hilfeleistung' ? 1 : ausgang === 'transportdienst' ? wahl([1, 2]) : ausgang === 'ambulant' ? wahl([1, 2, 2]) : wahl([2, 3, 3, 3, 4, 4, 5]);
+          e.naca = ausgang === 'verstorben' ? 7 : ausgang === 'hilfeleistung' ? 1 : ausgang === 'transportdienst' ? wahl([1, 2]) : ausgang === 'transportMitNotarzt' ? wahl([4, 5, 5, 6]) : ausgang === 'transportOhneNotarzt' ? wahl([3, 4, 4, 5]) : ausgang === 'ambulant' ? wahl([1, 2, 2]) : wahl([2, 3, 3, 3, 4, 4, 5]);
           // Der klassische Fall: „N-Internistisch, V. a. AKS“ – vor Ort Rückenschmerzen seit drei Wochen.
           if (typ === 'N' && fach === 'Internistisch' && ausgang === 'ambulant' && r() > 0.3) {
             befund = 'Rückenschmerzen';

@@ -53,6 +53,17 @@ export interface TriageStatistik {
   abweichungen: Abweichung[];
 }
 
+/**
+ * Transporte insgesamt, mit der Aufteilung nach Notarzt (NA). „Ambulant versorgt“ zählt nicht dazu.
+ * Der einfache „Transport“ gehört zur Gesamtzahl, steht aber nicht unter „davon“.
+ */
+export function transportZahlen(ergebnis: TriageStatistik['ergebnis']): { gesamt: number; mitNa: number; ohneNa: number } {
+  const n = (a: Ausgang) => ergebnis.find((e) => e.ausgang === a)?.n ?? 0;
+  const mitNa = n('transportMitNotarzt');
+  const ohneNa = n('transportOhneNotarzt');
+  return { gesamt: n('transport') + mitNa + ohneNa, mitNa, ohneNa };
+}
+
 const istNaca = (n: number | undefined): n is number => n != null && Number.isInteger(n) && n >= 1 && n <= NACA_INFO.length;
 
 export function berechneTriage(einsaetze: readonly Einsatz[], katalog: ReadonlyMap<number, KatalogEintrag>): TriageStatistik {

@@ -8,7 +8,7 @@ Persönliche Einsatzdokumentation für Notfallsanitäter und Feuerwehr: Dienste 
 - **Einsätze** in Sekunden erfassen, Details sind optional und auch nach dem Dienst nachtragbar.
   - Alarmstichwort wie in der Praxis: Rettungsdienst `R`/`N` mit Fachrichtung und Kräfteansatz (z. B. R1N1), Feuerwehr `F`/`H`/`ABC` mit Kategorie, MIG, **Alarmstufe** (0–6, Vorschlag aus der AAO, bei Nachalarmierung die höchste Stufe) und Atemschutz. Die Stichworte der Feuerwehr sind nach der AAO der Berufsfeuerwehr Bergisch Gladbach (V 5.2) vorbelegt und lassen sich unter **Mehr → Listen pflegen** anpassen.
   - Zeiten: Alarm, Status 1, Status 2. Daraus folgen Einsatzdauer, Rückfahrt und Wachzeit.
-  - **Ergebnis** (Transport, ambulant versorgt, lehnt ab, verstorben, nur Transport, Hilfeleistung, Fehleinsatz), **NACA** (mit durchsuchbarer Beispieltabelle: Krankheitsbilder und Verletzungen je Wert), **Verdachtsdiagnose** und der **Verdacht laut Leitstelle**.
+  - **Ergebnis** (Transport, Transport mit NA, Transport ohne NA, ambulant versorgt, lehnt ab, verstorben, nur Transport, Hilfeleistung, Fehleinsatz), **NACA** (mit durchsuchbarer Beispieltabelle: Krankheitsbilder und Verletzungen je Wert), **Verdachtsdiagnose** und der **Verdacht laut Leitstelle**.
   - **Alarmierung bewerten**: passend, zu hoch oder zu niedrig – mit automatischem Vorschlag aus NACA und Ergebnis.
   - **Maßnahmen und Medikamente** nach dem Gemeinsamen Kompendium Rettungsdienst 2026, getrennt nach Vorabdelegation, eigenverantwortlich und auf Anordnung.
   - **Maßnahmen auf Befehl** im Feuerwehreinsatz (z. B. Löschangriff, Türöffnung, Messen) aus einer eigenen, wachsenden Liste in fünf Gruppen.

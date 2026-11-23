@@ -17,6 +17,7 @@ import {
 } from '../domain/time';
 import {
   AUSGANG_INFO,
+  ausgangBrauchtNotarzt,
   BEWERTUNG_INFO,
   bereichVon,
   hatPlan,
@@ -373,6 +374,10 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
     status2: f.status2 && !p2 ? 'Uhrzeit wie 15:25 eingeben.' : undefined,
     typ: !typ ? 'Wähle die Einsatzart.' : undefined,
     kategorie: typ && f.kategorie.length === 0 ? 'Wähle oder lege ein Stichwort an.' : undefined,
+    notarzt:
+      bereich === 'RD' && f.ausgang && ausgangBrauchtNotarzt(f.ausgang) && f.notarzt !== true
+        ? `Bei „${AUSGANG_INFO[f.ausgang].kurz}“ war ein Notarzt vor Ort. Wähle „Ja“ oder ändere das Ergebnis.`
+        : undefined,
   };
   const zeigeZeit = (feld: 'alarm' | 'status1' | 'status2') => (versucht || f[feld] !== '' ? fehler[feld] : undefined);
 
@@ -439,10 +444,21 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
     });
   };
 
+  /** Ein Ergebnis mit Notarzt (Transport mit NA, Transport ohne NA) setzt „Notarzt vor Ort“ auf Ja. */
+  const waehleAusgang = (ausgang: Ausgang | null) => {
+    if (ausgangBrauchtNotarzt(ausgang) && f.notarzt !== true) {
+      set({ ausgang, notarzt: true });
+      toast.zeige('„Notarzt vor Ort“ auf Ja gesetzt');
+    } else {
+      set({ ausgang });
+    }
+  };
+
   const speichern = async () => {
     setVersucht(true);
     if (hatFehler || !typ || alarmAuf == null || status1Ms == null) {
       if (fehlendeMassnahmen.size > 0) setMassnahmenOffen(true);
+      if (fehler.notarzt) setErgebnisOffen(true);
       window.setTimeout(() => document.querySelector('.feld--fehler, .massnahme--fehler')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
       return;
     }
@@ -676,7 +692,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
 
       {bereich === 'RD' && (
         <Aufklappen titel="Ergebnis und Befund" zusatz={ergebnisSumme || undefined} offen={ergebnisOffen} onToggle={() => setErgebnisOffen((o) => !o)}>
-          <AusgangWahl wert={f.ausgang} onChange={(ausgang) => set({ ausgang })} />
+          <AusgangWahl wert={f.ausgang} onChange={waehleAusgang} />
           <NacaWahl wert={f.naca} onChange={(naca) => set({ naca })} />
           <KatalogAuswahl
             label="Verdachtsdiagnose"
@@ -691,7 +707,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
             hinweis="Dein Befund vor Ort. Was fehlt, legst du mit „+ Neu“ an."
           />
           <AlterWahl wert={f.alter} onChange={(alter) => set({ alter })} />
-          <JaNein label="Notarzt vor Ort" wert={f.notarzt} onChange={(notarzt) => set({ notarzt })} />
+          <JaNein label="Notarzt vor Ort" wert={f.notarzt} onChange={(notarzt) => set({ notarzt })} fehler={fehler.notarzt} />
         </Aufklappen>
       )}
 

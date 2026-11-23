@@ -98,6 +98,19 @@ describe('CSV', () => {
     expect(zeilen[1].split(';')[kopf.indexOf('Bewertung Alarmierung')]).toBe('Zu hoch');
   });
 
+  it.each([
+    ['transportMitNotarzt', 'Transport mit NA'],
+    ['transportOhneNotarzt', 'Transport ohne NA'],
+  ] as const)('schreibt „%s“ als „%s“ mit Notarzt vor Ort und ohne Übertriage', (ausgang, name) => {
+    const mitNotarzt: Einsatz = { ...einsatz, ausgang, notarztVorOrt: true, alarmBewertung: undefined };
+    const zeilen = erzeugeEinsaetzeCsv([dienst], [mitNotarzt], katalog).trim().split('\r\n');
+    const kopf = zeilen[0].split(';');
+    const w = zeilen[1].split(';');
+    expect(w[kopf.indexOf('Ergebnis')]).toBe(name);
+    expect(w[kopf.indexOf('Notarzt vor Ort')]).toBe('ja');
+    expect(w[kopf.indexOf('Bewertung Alarmierung')]).toBe('');
+  });
+
   it('schreibt Dienste mit Über-/Minusstunden', () => {
     const zeilen = erzeugeDiensteCsv([dienst], [einsatz], katalog, true).trim().split('\r\n');
     const w = zeilen[1].split(';');

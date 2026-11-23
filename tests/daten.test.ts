@@ -329,6 +329,19 @@ describe('Sicherung', () => {
     expect(await erzeugeBackup(1_700_000_000_000)).toEqual(vorher);
   });
 
+  it('Hin- und Rückweg erhält die Ergebnisse „Transport mit NA“ und „Transport ohne NA“', async () => {
+    const { dienstId, chir } = await beispielDaten();
+    const basis = { dienstId, typ: 'N' as const, kategorieId: chir.id!, kraefteRtw: 1, kraefteNef: 1, notarztVorOrt: true };
+    const mitId = await speichereEinsatz({ ...basis, alarm: T('2026-11-14', 11), status1: T('2026-11-14', 11, 50), ausgang: 'transportMitNotarzt', naca: 5 });
+    const ohneId = await speichereEinsatz({ ...basis, alarm: T('2026-11-14', 13), status1: T('2026-11-14', 13, 40), ausgang: 'transportOhneNotarzt', naca: 4 });
+    const vorher = await erzeugeBackup(1_700_000_000_000);
+    await loescheAlleDaten();
+    await stelleWiederHer(leseBackupText(JSON.stringify(vorher)));
+    expect(await db.einsaetze.get(mitId)).toMatchObject({ ausgang: 'transportMitNotarzt', notarztVorOrt: true, naca: 5 });
+    expect(await db.einsaetze.get(ohneId)).toMatchObject({ ausgang: 'transportOhneNotarzt', notarztVorOrt: true, naca: 4 });
+    expect(await erzeugeBackup(1_700_000_000_000)).toEqual(vorher);
+  });
+
   it('lehnt kaputte Maßnahmen, Orte und Atemschutzminuten in Übungen ab', async () => {
     await mitUebungen();
     const gut = JSON.parse(JSON.stringify(await erzeugeBackup()));
@@ -363,12 +376,15 @@ describe('Sicherung', () => {
     const gut = await erzeugeBackup();
     const vorher = await db.uebungen.count();
 
+    // Die Schlüssel zählen über alle Tests hinweg weiter, eine feste Zahl wäre irgendwann vergeben.
+    const freieId = (ids: (number | undefined)[]) => Math.max(0, ...ids.map((id) => id ?? 0)) + 1;
+
     const ohneDienst = structuredClone(gut);
-    ohneDienst.daten.uebungen[0].dienstId = 4711;
+    ohneDienst.daten.uebungen[0].dienstId = freieId(gut.daten.dienste.map((d) => d.id));
     expect(() => pruefeBackup(ohneDienst)).toThrow(/Übung Nr\. 1 gehört zu einem Dienst, der in der Sicherung fehlt/);
 
     const ohneArt = structuredClone(gut);
-    ohneArt.daten.uebungen[1].artId = 4711;
+    ohneArt.daten.uebungen[1].artId = freieId(gut.daten.katalog.map((k) => k.id));
     expect(() => pruefeBackup(ohneArt)).toThrow(/Übung Nr\. 2 verweist auf eine Übungsart/);
 
     const zeit = structuredClone(gut);

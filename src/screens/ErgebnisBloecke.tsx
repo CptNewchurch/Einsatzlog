@@ -24,9 +24,9 @@ const ALTER: { wert: Altersgruppe; label: string }[] = [
   { wert: 'senior', label: 'Senior' },
 ];
 
-export function JaNein({ label, wert, onChange }: { label: string; wert: boolean | null; onChange: (w: boolean | null) => void }) {
+export function JaNein({ label, wert, onChange, fehler }: { label: string; wert: boolean | null; onChange: (w: boolean | null) => void; fehler?: string }) {
   return (
-    <Feld label={label}>
+    <Feld label={label} fehler={fehler}>
       <ChipReihe label={label}>
         <Chip aktiv={wert === true} onClick={() => onChange(wert === true ? null : true)}>
           Ja

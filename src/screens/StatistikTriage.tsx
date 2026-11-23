@@ -1,5 +1,5 @@
 import { NACA_GRUPPE_INFO, NACA_INFO, NACA_LEICHT_MAX, NACA_NOTARZT_AB } from '../domain/triage';
-import type { TriageStatistik } from '../domain/triageStats';
+import { transportZahlen, type TriageStatistik } from '../domain/triageStats';
 import { fmtZahl } from '../domain/time';
 import { AUSGANG_INFO, BEWERTUNG_INFO, BEWERTUNGEN, type Ausgang } from '../domain/types';
 import { Balken, ChartKarte } from '../ui/charts';
@@ -38,6 +38,8 @@ function ErgebnisAbschnitt({ t, zeitraum }: Props) {
   const anzahl = (a: Ausgang) => t.ergebnis.find((e) => e.ausgang === a)?.n ?? 0;
   const fehleinsaetze = t.fehleinsaetzeRd + t.fehleinsaetzeFw;
   const ohneNotfall = anzahl('transportdienst') + anzahl('hilfeleistung');
+  // Transporte insgesamt, auch die mit und ohne NA; „Ambulant versorgt“ bleibt davon getrennt.
+  const { gesamt: transporte, mitNa, ohneNa } = transportZahlen(t.ergebnis);
   const alle = t.rd + t.fw;
 
   if (t.rd === 0) {
@@ -71,7 +73,22 @@ function ErgebnisAbschnitt({ t, zeitraum }: Props) {
       ) : (
         <>
           <KpiRaster>
-            <Kpi wert={fmtZahl(anzahl('transport'))} label="Transport" ton="rd" zusatz={`${prozent(anzahl('transport'), t.ergebnisErfasst)} der erfassten`} />
+            <Kpi
+              wert={fmtZahl(transporte)}
+              label="Transport"
+              ton="rd"
+              zusatz={
+                <>
+                  {prozent(transporte, t.ergebnisErfasst)} der erfassten
+                  {mitNa + ohneNa > 0 && (
+                    <>
+                      <br />
+                      davon {fmtZahl(mitNa)}&nbsp;mit&nbsp;NA, {fmtZahl(ohneNa)}&nbsp;ohne&nbsp;NA
+                    </>
+                  )}
+                </>
+              }
+            />
             <Kpi wert={fmtZahl(anzahl('ambulant'))} label="Ambulant versorgt" ton="rd" zusatz={`${prozent(anzahl('ambulant'), t.ergebnisErfasst)} der erfassten`} />
             <Kpi wert={fmtZahl(ohneNotfall)} label="Ohne Notfall" ton="rd" zusatz="Nur Transport oder Hilfeleistung" />
             <Kpi wert={fmtZahl(fehleinsaetze)} label="Fehleinsätze" zusatz={`${prozent(fehleinsaetze, alle)} der Einsätze`} />
