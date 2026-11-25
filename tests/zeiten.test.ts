@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { berechneDienstZeiten, einsatzZeitraeume, laengeOhne, vereinigeZeitraeume } from '../src/domain/zeiten';
+import { berechneDienstZeiten, einsatzZeitraeume, laengeOhne, rueckfahrtEnde, vereinigeZeitraeume } from '../src/domain/zeiten';
 import { kraefteText, standardKraefte, stichwortText } from '../src/domain/stichwort';
 import { MIN, zeitpunkt } from '../src/domain/time';
 
@@ -215,5 +215,55 @@ describe('Stichwort', () => {
     expect(standardKraefte('R')).toEqual({ rtw: 1, nef: 0 });
     expect(standardKraefte('N')).toEqual({ rtw: 1, nef: 1 });
     expect(standardKraefte('F')).toBeNull();
+  });
+});
+
+describe('Alarmierung aus Status 1', () => {
+  const erster = { alarm: T(14, 9, 0), status1: T(14, 9, 40), folgeAusStatus1: true };
+  const zweiter = { alarm: T(14, 10, 0), status1: T(14, 10, 30), status2: T(14, 10, 45) };
+
+  it('zählt die Zeit bis zur nächsten Alarmierung als Rückfahrt, ohne Wachzeit und ohne „Status 2 fehlt“', () => {
+    const z = berechneDienstZeiten(dienst, [erster, zweiter], true);
+    expect(z.ausStatus1).toBe(1);
+    expect(z.ohneStatus2).toBe(0);
+    expect(z.mitStatus2).toBe(1);
+    expect(z.einsatzMin).toBe(40 + 30);
+    // 09:40–10:00 (20) + 10:30–10:45 (15)
+    expect(z.rueckfahrtMin).toBe(35);
+    // 07:00–09:00 (120) + 10:45–07:00 (1215), dazwischen keine Wache
+    expect(z.wacheMin).toBe(120 + 1215);
+  });
+
+  it('ohne den Schalter bleibt der fehlende Status 2 ein Fehlen', () => {
+    const z = berechneDienstZeiten(dienst, [{ alarm: erster.alarm, status1: erster.status1 }, zweiter], true);
+    expect(z.ausStatus1).toBe(0);
+    expect(z.ohneStatus2).toBe(1);
+    expect(z.rueckfahrtMin).toBe(15);
+  });
+
+  it('der Schalter wirkt nicht, wenn ein Status 2 eingetragen ist', () => {
+    const z = berechneDienstZeiten(dienst, [{ ...erster, status2: T(14, 9, 55) }, zweiter], true);
+    expect(z.ausStatus1).toBe(0);
+    expect(z.rueckfahrtMin).toBe(15 + 15);
+  });
+
+  it('als letzter Einsatz des Dienstes gibt es keine Rückfahrtzeit, der fehlende Status 2 zählt trotzdem nicht als fehlend', () => {
+    const z = berechneDienstZeiten(dienst, [erster], true);
+    expect(z.ausStatus1).toBe(1);
+    expect(z.ohneStatus2).toBe(0);
+    expect(z.rueckfahrtMin).toBe(0);
+  });
+
+  it('rueckfahrtEnde: Status 2, sonst nächste Alarmierung, sonst Status 1', () => {
+    expect(rueckfahrtEnde({ ...erster, status2: T(14, 9, 50) }, T(14, 10))).toBe(T(14, 9, 50));
+    expect(rueckfahrtEnde(erster, T(14, 10))).toBe(T(14, 10));
+    expect(rueckfahrtEnde(erster, undefined)).toBe(erster.status1);
+    expect(rueckfahrtEnde(erster, T(14, 9, 30))).toBe(erster.status1);
+    expect(rueckfahrtEnde({ alarm: erster.alarm, status1: erster.status1 }, T(14, 10))).toBe(erster.status1);
+  });
+
+  it('eine Übung in dieser Zeit zählt als Einsatz bzw. Rückfahrt, nicht als Übung', () => {
+    const zeitraeume = einsatzZeitraeume([zweiter, erster], dienst.beginn, dienst.ende);
+    expect(zeitraeume).toEqual([[T(14, 9, 0), T(14, 10, 45)]]);
   });
 });

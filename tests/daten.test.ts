@@ -342,6 +342,20 @@ describe('Sicherung', () => {
     expect(await erzeugeBackup(1_700_000_000_000)).toEqual(vorher);
   });
 
+  it('Hin- und Rückweg erhält „Danach aus Status 1 alarmiert“, und ein falscher Wert wird abgelehnt', async () => {
+    const { dienstId, chir } = await beispielDaten();
+    const basis = { dienstId, typ: 'R' as const, kategorieId: chir.id!, kraefteRtw: 1, kraefteNef: 0 };
+    const id = await speichereEinsatz({ ...basis, alarm: T('2026-11-14', 15), status1: T('2026-11-14', 15, 40), folgeAusStatus1: true });
+    const vorher = await erzeugeBackup(1_700_000_000_000);
+    await loescheAlleDaten();
+    await stelleWiederHer(leseBackupText(JSON.stringify(vorher)));
+    expect((await db.einsaetze.get(id))?.folgeAusStatus1).toBe(true);
+    expect(await erzeugeBackup(1_700_000_000_000)).toEqual(vorher);
+    const kaputt = JSON.parse(JSON.stringify(vorher));
+    kaputt.daten.einsaetze.find((e: { id: number }) => e.id === id).folgeAusStatus1 = 'ja';
+    expect(() => pruefeBackup(kaputt)).toThrow(/Einsatz Nr\. \d+ in der Sicherung ist ungültig/);
+  });
+
   it('lehnt kaputte Maßnahmen, Orte und Atemschutzminuten in Übungen ab', async () => {
     await mitUebungen();
     const gut = JSON.parse(JSON.stringify(await erzeugeBackup()));

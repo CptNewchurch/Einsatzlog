@@ -111,6 +111,17 @@ describe('CSV', () => {
     expect(w[kopf.indexOf('Bewertung Alarmierung')]).toBe('');
   });
 
+  it('markiert „Danach aus Status 1 alarmiert“ nur ohne Status 2', () => {
+    const spalte = (e: Einsatz) => {
+      const zeilen = erzeugeEinsaetzeCsv([dienst], [e], katalog).trim().split('\r\n');
+      return zeilen[1].split(';')[zeilen[0].split(';').indexOf('Danach aus Status 1 alarmiert')];
+    };
+    const ohne2: Einsatz = { ...einsatz, status2: undefined, notiz: undefined };
+    expect(spalte({ ...ohne2, folgeAusStatus1: true })).toBe('ja');
+    expect(spalte(ohne2)).toBe('');
+    expect(spalte({ ...ohne2, status2: einsatz.status1 + 10 * 60_000, folgeAusStatus1: true })).toBe('');
+  });
+
   it('schreibt Dienste mit Über-/Minusstunden', () => {
     const zeilen = erzeugeDiensteCsv([dienst], [einsatz], katalog, true).trim().split('\r\n');
     const w = zeilen[1].split(';');

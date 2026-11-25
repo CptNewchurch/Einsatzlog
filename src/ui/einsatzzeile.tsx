@@ -29,7 +29,7 @@ export function EinsatzZeile({ einsatz: e, mitDatum }: Props) {
   if (e.nachalarmiert) marken.push('nachalarmiert');
   (e.nachforderungen ?? []).forEach((n) => marken.push(`Nachf. ${katalogName(d, n.ressourceId)}`));
   if ((e.massnahmen ?? []).length > 0) marken.push(`${e.massnahmen!.length} Maßn.`);
-  if (e.status2 == null) marken.push('Status 2 fehlt');
+  if (e.status2 == null) marken.push(e.folgeAusStatus1 ? 'danach aus Status 1 alarmiert' : 'Status 2 fehlt');
 
   return (
     <a className={`einsatzzeile einsatzzeile--${bereich}`} href={`#/einsatz/${e.id}`}>

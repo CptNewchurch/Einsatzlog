@@ -48,8 +48,8 @@ export function Ueber() {
       <Abschnitt titel="So wird gerechnet">
         <ul className="punkte">
           <li><strong>Einsatzdauer:</strong> Alarmierung bis Status 1.</li>
-          <li><strong>Rückfahrt:</strong> Status 1 bis Status 2.</li>
-          <li><strong>Wachzeit:</strong> Status 2 bis zur nächsten Alarmierung, auf Wunsch auch Dienstanfang und -ende.</li>
+          <li><strong>Rückfahrt:</strong> Status 1 bis Status 2. Wurdest du aus Status 1 heraus neu alarmiert, schaltest du „Danach aus Status 1 alarmiert“ ein: Dann zählt die Zeit bis zur nächsten Alarmierung als Rückfahrt, und der fehlende Status 2 gilt nicht als Lücke.</li>
+          <li><strong>Wachzeit:</strong> Status 2 bis zur nächsten Alarmierung, auf Wunsch auch Dienstanfang und -ende. Nach einer Alarmierung aus Status 1 gibt es keine Wachzeit.</li>
           <li><strong>Überstunden:</strong> Dienstantritt vor dem geplanten Beginn plus Dienstende nach dem geplanten Ende.</li>
           <li><strong>Minusstunden:</strong> später angetreten oder früher abgelöst.</li>
           <li>Zusatzdienste und Übungsdienste haben keinen Plan und zählen nicht zu Über- und Minusstunden.</li>

@@ -49,7 +49,7 @@ export function erzeugeEinsaetzeCsv(
     'Typ', 'Stichwort', 'MIG', 'Kräfteansatz', 'Alarmstufe', 'Dienst', 'Dienstart', 'Wache / Standort', 'Fahrzeug', 'Rolle',
     'Nachalarmiert', 'Nachforderungen', 'Ergebnis', 'NACA', 'NACA-Gruppe', 'Verdachtsdiagnose', 'Laut Leitstelle',
     'Bewertung Alarmierung', 'Altersgruppe', 'Notarzt vor Ort',
-    'Maßnahmen', 'Atemschutz', 'Atemschutz (min)', 'Ort', 'Tags', 'Notiz',
+    'Maßnahmen', 'Atemschutz', 'Atemschutz (min)', 'Ort', 'Tags', 'Notiz', 'Danach aus Status 1 alarmiert',
   ];
   const zeilen = [...einsaetze]
     .sort((a, b) => a.alarm - b.alarm)
@@ -92,6 +92,7 @@ export function erzeugeEinsaetzeCsv(
         e.ortGrob ?? '',
         (e.tagIds ?? []).map(name).join(', '),
         e.notiz ?? '',
+        e.status2 == null && e.folgeAusStatus1 ? true : '',
       ];
     });
   return csvText(kopf, zeilen);

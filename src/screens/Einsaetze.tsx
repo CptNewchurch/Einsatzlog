@@ -79,7 +79,7 @@ export function Einsaetze() {
       (e) =>
         (bereich === 'alle' || bereichVon(e.typ) === bereich) &&
         (jahr == null || new Date(e.alarm).getFullYear() === jahr) &&
-        (!offen || e.status2 == null) &&
+        (!offen || (e.status2 == null && !e.folgeAusStatus1)) &&
         (!q || (heuhaufen.get(e.id!) ?? '').includes(q)),
     );
   }, [einsaetze, suche, bereich, jahr, offen, heuhaufen]);

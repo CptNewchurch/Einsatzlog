@@ -1,7 +1,7 @@
 import { MIN } from './time';
 import type { Dienst, Einsatz, Uebung } from './types';
 
-export type ZeitEinsatz = Pick<Einsatz, 'alarm' | 'status1' | 'status2'>;
+export type ZeitEinsatz = Pick<Einsatz, 'alarm' | 'status1' | 'status2' | 'folgeAusStatus1'>;
 export type ZeitUebung = Pick<Uebung, 'beginn' | 'ende'>;
 
 /** Fasst sich überschneidende Zeiträume zusammen und beschneidet sie auf [von, bis]. */
@@ -25,10 +25,22 @@ function ueberdeckung(zeitraeume: readonly [number, number][], von: number, bis:
   return ms;
 }
 
-/** Zeit, in der ein Einsatz lief oder die Rückfahrt dauerte: Alarmierung bis Status 2, ohne Status 2 bis Status 1. */
+/**
+ * Ende der Rückfahrt: Status 2. Wurde das Fahrzeug aus Status 1 heraus neu alarmiert (kein Status 2),
+ * endet sie mit dieser Alarmierung. Sonst ist es Status 1.
+ * `naechsterAlarm` ist die Alarmierung des folgenden Einsatzes im selben Dienst.
+ */
+export function rueckfahrtEnde(e: ZeitEinsatz, naechsterAlarm: number | undefined): number {
+  if (e.status2 != null) return Math.max(e.status1, e.status2);
+  if (e.folgeAusStatus1 && naechsterAlarm != null && naechsterAlarm > e.status1) return naechsterAlarm;
+  return e.status1;
+}
+
+/** Zeit, in der ein Einsatz lief oder die Rückfahrt dauerte: Alarmierung bis Status 2 (bzw. bis zur Neualarmierung aus Status 1). */
 export function einsatzZeitraeume(einsaetze: readonly ZeitEinsatz[], von: number, bis: number): [number, number][] {
+  const liste = [...einsaetze].sort((a, b) => a.alarm - b.alarm);
   return vereinigeZeitraeume(
-    einsaetze.map((e) => ({ beginn: e.alarm, ende: Math.max(e.status1, e.status2 ?? e.status1) })),
+    liste.map((e, i) => ({ beginn: e.alarm, ende: rueckfahrtEnde(e, liste[i + 1]?.alarm) })),
     von,
     bis,
   );
@@ -61,7 +73,7 @@ export interface DienstZeiten {
   dienstMin: number;
   /** Alarmierung bis Status 1. */
   einsatzMin: number;
-  /** Status 1 bis Status 2 (nur Einsätze mit Status 2). */
+  /** Status 1 bis Status 2, bei Alarmierung aus Status 1 bis zur nächsten Alarmierung (Einsätze ohne beides fehlen). */
   rueckfahrtMin: number;
   /** Status 2 bis zur nächsten Alarmierung (und je nach Einstellung Dienstanfang und -ende), ohne die Übungszeit. */
   wacheMin: number;
@@ -69,7 +81,10 @@ export interface DienstZeiten {
   uebungMin: number;
   einsaetze: number;
   mitStatus2: number;
+  /** Einsätze ohne Status 2, bei denen er fehlt. Wer danach aus Status 1 alarmiert wurde, zählt nicht dazu. */
   ohneStatus2: number;
+  /** Einsätze, nach denen das Fahrzeug aus Status 1 heraus neu alarmiert wurde (kein Status 2). */
+  ausStatus1: number;
   /** Nächste Alarmierung vor dem Status 1 des vorigen Einsatzes. */
   ueberlappungen: number;
   /** Status 2 liegt nach der nächsten Alarmierung (z. B. auf der Rückfahrt neu alarmiert). */
@@ -80,6 +95,8 @@ export interface DienstZeiten {
  * Teilt einen Dienst in Einsatz-, Rückfahrt- und Wachzeit.
  *
  * Wachzeit = Status 2 bis zur nächsten Alarmierung. Einsätze ohne Status 2 liefern keine Wachzeit.
+ * Wurde das Fahrzeug danach aus Status 1 heraus alarmiert, gibt es keine Wachzeit, und die Zeit von
+ * Status 1 bis zur nächsten Alarmierung zählt als Rückfahrt. Der fehlende Status 2 ist dann in Ordnung.
  * Mit `randZaehltAlsWache` zählen zusätzlich Dienstbeginn bis zur ersten Alarmierung und der
  * letzte Status 2 bis Dienstende (ohne Einsätze: der ganze Dienst).
  * Übungen in der Schicht werden getrennt ausgewiesen und aus der Wachzeit herausgerechnet. Das gilt
@@ -109,6 +126,7 @@ export function berechneDienstZeiten(
   };
   let mitStatus2 = 0;
   let ohneStatus2 = 0;
+  let ausStatus1 = 0;
   let ueberlappungen = 0;
   let status2NachAlarm = 0;
 
@@ -123,7 +141,12 @@ export function berechneDienstZeiten(
     if (naechster && naechster.alarm < e.status1) ueberlappungen += 1;
 
     if (e.status2 == null) {
-      ohneStatus2 += 1;
+      if (e.folgeAusStatus1) {
+        ausStatus1 += 1;
+        rueckMs += Math.max(0, rueckfahrtEnde(e, naechster?.alarm) - e.status1);
+      } else {
+        ohneStatus2 += 1;
+      }
       return;
     }
     mitStatus2 += 1;
@@ -149,6 +172,7 @@ export function berechneDienstZeiten(
     einsaetze: liste.length,
     mitStatus2,
     ohneStatus2,
+    ausStatus1,
     ueberlappungen,
     status2NachAlarm,
   };

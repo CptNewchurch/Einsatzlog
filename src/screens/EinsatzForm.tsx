@@ -58,6 +58,8 @@ interface FormState {
   alarm: string;
   status1: string;
   status2: string;
+  /** Danach aus Status 1 heraus alarmiert (nur ohne Status 2). */
+  folgeAusStatus1: boolean;
   fahrzeug: number[];
   rolle: number[];
   nachalarmiert: boolean;
@@ -94,6 +96,7 @@ function neuerEntwurf(dienst: Dienst): FormState {
     alarm: '',
     status1: '',
     status2: '',
+    folgeAusStatus1: false,
     fahrzeug: dienst.fahrzeugId != null ? [dienst.fahrzeugId] : [],
     rolle: dienst.rolleId != null ? [dienst.rolleId] : [],
     nachalarmiert: false,
@@ -132,6 +135,7 @@ function ausEinsatz(e: Einsatz): FormState {
     alarm: fmtZeit(e.alarm),
     status1: fmtZeit(e.status1),
     status2: e.status2 != null ? fmtZeit(e.status2) : '',
+    folgeAusStatus1: !!e.folgeAusStatus1,
     fahrzeug: e.fahrzeugId != null ? [e.fahrzeugId] : [],
     rolle: e.rolleId != null ? [e.rolleId] : [],
     nachalarmiert: !!e.nachalarmiert,
@@ -475,6 +479,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       alarm: alarmAuf,
       status1: status1Ms,
       status2: status2Ms ?? undefined,
+      folgeAusStatus1: status2Ms == null && f.status2 === '' && f.folgeAusStatus1 ? true : undefined,
       fahrzeugId: f.fahrzeug[0],
       rolleId: f.rolle[0],
       nachalarmiert: f.nachalarmiert ? true : undefined,
@@ -664,9 +669,24 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
           onChange={(status2) => set({ status2 })}
           fehler={zeigeZeit('status2')}
           optional
-          hinweis={rueckMin != null ? `Rückfahrt ${fmtDauer(rueckMin)}` : 'Für die Wachzeit. Kann auch später nachgetragen werden.'}
+          hinweis={
+            rueckMin != null
+              ? `Rückfahrt ${fmtDauer(rueckMin)}`
+              : f.folgeAusStatus1
+                ? 'Entfällt, weil du aus Status 1 heraus alarmiert wurdest.'
+                : 'Für die Wachzeit. Kann auch später nachgetragen werden.'
+          }
           rechts={<SchnellZeiten label="Rückfahrt wählen" basis={status1Ms} minuten={[5, 10, 15, 20]} aktivMs={status2Ms} jetzt onWahl={(status2) => set({ status2 })} />}
         />
+
+        {f.status2 === '' && (
+          <Toggle
+            an={f.folgeAusStatus1}
+            onChange={(folgeAusStatus1) => set({ folgeAusStatus1 })}
+            label="Danach aus Status 1 alarmiert"
+            hinweis="Du warst noch unterwegs und wurdest zum nächsten Einsatz alarmiert, ohne auf Wache zu sein. Status 2 fehlt dann nicht."
+          />
+        )}
 
         {dauerMin != null && dauerMin > 8 * 60 && <Meldung art="warnung">Der Einsatz dauert über 8 Stunden. Stimmen Alarmierung und Status 1?</Meldung>}
         {rueckMin != null && rueckMin > 3 * 60 && <Meldung art="warnung">Die Rückfahrt dauert über 3 Stunden. Stimmt Status 2?</Meldung>}

@@ -267,6 +267,11 @@ export interface Einsatz {
   status1: number;
   /** Status 2: einsatzbereit auf Wache. */
   status2?: number;
+  /**
+   * Das Fahrzeug wurde nach diesem Einsatz aus Status 1 heraus zum nächsten Einsatz alarmiert und war
+   * deshalb nicht auf Wache. Es gibt dann keinen Status 2, und das ist kein Fehler. Nur ohne Status 2.
+   */
+  folgeAusStatus1?: boolean;
   fahrzeugId?: number;
   rolleId?: number;
   /** Das eigene Fahrzeug wurde zu einem laufenden Einsatz nachgefordert. */

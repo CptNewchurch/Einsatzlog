@@ -372,6 +372,11 @@ export function Statistik() {
               In der Einsatzliste findest du sie mit dem Filter „Status 2 fehlt“.
             </Meldung>
           )}
+          {z.ausStatus1 > 0 && (
+            <Meldung art="info">
+              Nach {z.ausStatus1} {z.ausStatus1 === 1 ? 'Einsatz' : 'Einsätzen'} wurdest du aus Status 1 heraus neu alarmiert. Die Zeit bis dahin zählt als Rückfahrt, Wachzeit gibt es dort nicht.
+            </Meldung>
+          )}
           {z.ueberlappungen > 0 && (
             <Meldung art="info">
               {z.ueberlappungen} {z.ueberlappungen === 1 ? 'Einsatz überschneidet' : 'Einsätze überschneiden'} sich mit dem nächsten. Die Einsatzzeit wird dann doppelt gezählt.

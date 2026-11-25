@@ -121,6 +121,8 @@ export function pruefeBackup(roh: unknown): BackupDatei {
       !istZahl(e.status1) ||
       e.status1 <= e.alarm ||
       (e.status2 != null && (!istZahl(e.status2) || e.status2 < e.status1)) ||
+      // Neu in 1.5.0; ältere Sicherungen haben das Feld nicht.
+      (e.folgeAusStatus1 != null && typeof e.folgeAusStatus1 !== 'boolean') ||
       // Die Alarmstufe kam später dazu; ältere Sicherungen haben sie nicht.
       (e.alarmstufe != null && !istAlarmstufe(e.alarmstufe))
     ) {

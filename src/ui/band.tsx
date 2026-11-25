@@ -1,5 +1,6 @@
 import { fmtZeit } from '../domain/time';
 import { bereichVon } from '../domain/types';
+import { rueckfahrtEnde } from '../domain/zeiten';
 import type { Dienst, Einsatz, Uebung } from '../domain/types';
 
 interface Props {
@@ -60,10 +61,11 @@ export function DienstBand({ dienst, einsaetze, uebungen = [], gross, verlinkt, 
             <span key={`u${u.id}`} className="band__seg band__seg--ue" style={lageU} aria-hidden="true" />
           );
         })}
-        {einsaetze.map((e) => {
+        {[...einsaetze].sort((a, b) => a.alarm - b.alarm).map((e, i, liste) => {
           const bereich = bereichVon(e.typ).toLowerCase();
           const einsatzLage = lage(e.alarm, e.status1);
-          const rueck = e.status2 != null ? lage(e.status1, e.status2) : null;
+          const rueckEnde = rueckfahrtEnde(e, liste[i + 1]?.alarm);
+          const rueck = rueckEnde > e.status1 ? lage(e.status1, rueckEnde) : null;
           const label = `Einsatz ${fmtZeit(e.alarm)} bis ${fmtZeit(e.status1)}`;
           return (
             <span key={e.id}>

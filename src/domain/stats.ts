@@ -42,6 +42,8 @@ export interface Zeitsummen {
   /** Übungen in der Schicht, soweit sie in die Wachzeit fielen. */
   uebungMin: number;
   ohneStatus2: number;
+  /** Einsätze, nach denen das Fahrzeug aus Status 1 heraus neu alarmiert wurde. */
+  ausStatus1: number;
   ueberlappungen: number;
 }
 
@@ -177,6 +179,7 @@ export function berechneStatistik(
     wacheMin: 0,
     uebungMin: 0,
     ohneStatus2: 0,
+    ausStatus1: 0,
     ueberlappungen: 0,
   };
   dienste.forEach((d) => {
@@ -187,6 +190,7 @@ export function berechneStatistik(
     zeiten.wacheMin += z.wacheMin;
     zeiten.uebungMin += z.uebungMin;
     zeiten.ohneStatus2 += z.ohneStatus2;
+    zeiten.ausStatus1 += z.ausStatus1;
     zeiten.ueberlappungen += z.ueberlappungen;
   });
 

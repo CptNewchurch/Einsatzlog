@@ -146,7 +146,7 @@ export function DienstDetail({ id }: { id: number }) {
             <Kpi wert={fmtDauer(z.einsatzMin)} label="Im Einsatz" zusatz={`${anteil} % des Dienstes`} />
           </>
         )}
-        {!uebungsdienst && <Kpi wert={fmtDauer(z.wacheMin)} label="Auf Wache" zusatz={z.mitStatus2 < einsaetze.length ? 'unvollständig' : undefined} />}
+        {!uebungsdienst && <Kpi wert={fmtDauer(z.wacheMin)} label="Auf Wache" zusatz={z.mitStatus2 + z.ausStatus1 < einsaetze.length ? 'unvollständig' : undefined} />}
         {!uebungsdienst && uebungen.length > 0 && (
           <Kpi ton="ue" wert={fmtDauer(z.uebungMin)} label="Übung" zusatz={`${uebungen.length} ${uebungen.length === 1 ? 'Übung' : 'Übungen'}, nicht auf Wache`} />
         )}
@@ -155,6 +155,11 @@ export function DienstDetail({ id }: { id: number }) {
       {z.ohneStatus2 > 0 && (
         <Meldung art="info">
           {z.ohneStatus2 === 1 ? 'Bei einem Einsatz fehlt' : `Bei ${z.ohneStatus2} Einsätzen fehlt`} Status 2. Die Wachzeit danach ist daher nicht enthalten.
+        </Meldung>
+      )}
+      {z.ausStatus1 > 0 && (
+        <Meldung art="info">
+          {z.ausStatus1 === 1 ? 'Nach einem Einsatz' : `Nach ${z.ausStatus1} Einsätzen`} wurdest du aus Status 1 heraus neu alarmiert. Die Zeit bis dahin zählt als Rückfahrt, Wachzeit gibt es dort nicht.
         </Meldung>
       )}
       {z.ueberlappungen > 0 && (
