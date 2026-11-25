@@ -24,6 +24,8 @@ export type KatalogTyp =
   | 'diagnose'
   | 'ressource'
   | 'tag'
+  /** Stichwort einer sonstigen Hilfeleistung im Rettungsdienst, z. B. Tragehilfe. */
+  | 'hilfeleistung'
   /** Art einer Übung, z. B. Atemschutz oder Reanimation. */
   | 'uebungsart';
 
@@ -88,35 +90,38 @@ export const DURCHFUEHRUNG_INFO: Record<Durchfuehrung, { kurz: string; lang: str
 
 /**
  * Wie ein Einsatz ausging: was tatsächlich geschah, nicht was alarmiert wurde.
- * „transportMitNotarzt“ und „transportOhneNotarzt“ sind Transporte, bei denen ein Notarzt vor Ort
- * behandelt hat: im ersten Fall begleitet er den Patienten in die Klinik, im zweiten nicht.
- * „transport“ ist der Transport ohne Notarzt (oder ohne nähere Angabe, so auch in älteren Einsätzen).
- * Alle drei unterscheiden sich von „ambulant“, bei dem der Patient gar nicht transportiert wird.
- * „transportdienst“ und „hilfeleistung“ zählen als zu hohe Alarmierung (Übertriage),
- * weil dafür kein Rettungsmittel nötig gewesen wäre.
+ * Transporte: mit oder ohne Notarzt (NA). Ambulante Versorgung heißt Transportverzicht: Der Patient wird
+ * vor Ort versorgt und nicht transportiert, entweder mit NA oder allein durch den RTW. „Verweigerung“ ist
+ * die abgelehnte Behandlung oder der abgelehnte Transport. Beim Tod unterscheidet die App, ob er an der
+ * Einsatzstelle eintrat oder der Patient schon tot aufgefunden wurde. „Hilfeleistung“ ist die sonstige
+ * Hilfeleistung ohne medizinische Notlage und zählt als zu hohe Alarmierung (Übertriage), weil dafür kein
+ * Rettungsmittel nötig gewesen wäre. Sie bekommt ein Stichwort aus eigener Liste (`hilfeleistungId`).
  */
 export type Ausgang =
-  | 'transport'
   | 'transportMitNotarzt'
   | 'transportOhneNotarzt'
-  | 'ambulant'
-  | 'abgelehnt'
-  | 'verstorben'
-  | 'transportdienst'
-  | 'hilfeleistung'
-  | 'fehleinsatz';
+  | 'ambulantNotarzt'
+  | 'ambulantRtw'
+  | 'verweigerung'
+  | 'fehleinsatz'
+  | 'todEinsatzstelle'
+  | 'todAufgefunden'
+  | 'hilfeleistung';
+
+/** Ergebnisse bis Version 1.6.0, die es nicht mehr zur Auswahl gibt; sie bleiben gespeichert und werden zur Prüfung markiert. */
+export type AusgangAlt = 'transport' | 'ambulant' | 'verstorben' | 'transportdienst';
 
 /** Auswahl im Rettungsdienst, in dieser Reihenfolge. */
 export const AUSGAENGE_RD: readonly Ausgang[] = [
-  'transport',
   'transportMitNotarzt',
   'transportOhneNotarzt',
-  'ambulant',
-  'abgelehnt',
-  'verstorben',
-  'transportdienst',
-  'hilfeleistung',
+  'ambulantNotarzt',
+  'ambulantRtw',
+  'verweigerung',
   'fehleinsatz',
+  'todEinsatzstelle',
+  'todAufgefunden',
+  'hilfeleistung',
 ];
 
 export interface AusgangInfo {
@@ -129,33 +134,50 @@ export interface AusgangInfo {
 }
 
 export const AUSGANG_INFO: Record<Ausgang, AusgangInfo> = {
-  transport: {
-    kurz: 'Transport',
-    lang: 'Der Patient wurde in eine Klinik transportiert. War ein Notarzt vor Ort, wähle „Transport mit NA“ oder „Transport ohne NA“.',
-    uebertriage: false,
-  },
   transportMitNotarzt: {
     kurz: 'Transport mit NA',
-    lang: 'Der Notarzt hat vor Ort behandelt und begleitet den Transport in die Klinik.',
+    lang: 'Der Patient wurde in eine Klinik transportiert. Der Notarzt hat vor Ort behandelt und begleitet den Transport.',
     uebertriage: false,
     notarztVorOrt: true,
   },
   transportOhneNotarzt: {
     kurz: 'Transport ohne NA',
-    lang: 'Der Notarzt hat vor Ort behandelt, begleitet den Transport aber nicht. Der Patient wurde in eine Klinik transportiert.',
+    lang: 'Der Patient wurde in eine Klinik transportiert, ohne dass ein Notarzt den Transport begleitet hat. Ein Notarzt kann vor Ort behandelt haben.',
+    uebertriage: false,
+  },
+  ambulantNotarzt: {
+    kurz: 'Ambulant NA',
+    lang: 'Ambulante Versorgung durch den Notarzt vor Ort (Transportverzicht). Der Patient wurde nicht transportiert.',
     uebertriage: false,
     notarztVorOrt: true,
   },
-  ambulant: { kurz: 'Ambulant versorgt', lang: 'Vor Ort versorgt, ein Transport war nicht nötig.', uebertriage: false },
-  abgelehnt: { kurz: 'Lehnt ab', lang: 'Der Patient lehnt Transport oder Behandlung ab.', uebertriage: false },
-  verstorben: { kurz: 'Verstorben', lang: 'Tod festgestellt oder Reanimation erfolglos beendet.', uebertriage: false },
-  transportdienst: { kurz: 'Nur Transport', lang: 'Reine Transportleistung ohne Notfall. Das hätte ein Krankentransport sein können.', uebertriage: true },
-  hilfeleistung: { kurz: 'Hilfeleistung', lang: 'Keine medizinische Notlage, z. B. Aufstehhilfe oder Tragehilfe.', uebertriage: true },
+  ambulantRtw: {
+    kurz: 'Ambulant RTW',
+    lang: 'Ambulante Versorgung durch den RTW (Transportverzicht). Der Patient wurde nicht transportiert.',
+    uebertriage: false,
+  },
+  verweigerung: { kurz: 'Transportverweigerung', lang: 'Der Patient lehnt den Transport oder die Behandlung ab.', uebertriage: false },
   fehleinsatz: { kurz: 'Fehleinsatz', lang: 'Kein Patient oder keine Einsatzstelle angetroffen, Fehlalarm oder abgebrochen.', uebertriage: false },
+  todEinsatzstelle: {
+    kurz: 'Tod an Einsatzstelle',
+    lang: 'Der Patient ist an der Einsatzstelle verstorben, auch bei erfolglos beendeter Reanimation.',
+    uebertriage: false,
+  },
+  todAufgefunden: { kurz: 'Tod aufgefunden', lang: 'Der Patient wurde bereits tot aufgefunden.', uebertriage: false },
+  hilfeleistung: {
+    kurz: 'Sonstige Hilfeleistung',
+    lang: 'Keine medizinische Notlage, z. B. Aufstehhilfe oder Tragehilfe. Das Stichwort wählst du aus einer eigenen Liste.',
+    uebertriage: true,
+  },
 };
 
 /** Setzt das Ergebnis einen Notarzt vor Ort voraus? Dann muss „Notarzt vor Ort“ auf Ja stehen. */
-export const ausgangBrauchtNotarzt = (a: Ausgang | null | undefined): boolean => a != null && AUSGANG_INFO[a].notarztVorOrt === true;
+export const ausgangBrauchtNotarzt = (a: Ausgang | AusgangAlt | null | undefined): boolean =>
+  a != null && a in AUSGANG_INFO && AUSGANG_INFO[a as Ausgang].notarztVorOrt === true;
+
+/** Zählt als zu hohe Alarmierung. Das alte „Nur Transport“ galt ebenfalls so. */
+export const ausgangUebertriage = (a: Ausgang | AusgangAlt | null | undefined): boolean =>
+  a === 'transportdienst' || (a != null && a in AUSGANG_INFO && AUSGANG_INFO[a as Ausgang].uebertriage);
 
 /** Eigene Einschätzung, ob das Stichwort zum Befund vor Ort passte. */
 export type AlarmBewertung = 'passend' | 'hoch' | 'niedrig';
@@ -284,7 +306,9 @@ export interface Einsatz {
   naca?: number;
   altersgruppe?: Altersgruppe;
   notarztVorOrt?: boolean;
-  ausgang?: Ausgang;
+  ausgang?: Ausgang | AusgangAlt;
+  /** Nur bei „Sonstige Hilfeleistung“: das Stichwort aus der Liste der Hilfeleistungen. */
+  hilfeleistungId?: number;
   /** Verdachtsdiagnose vor Ort (Liste „diagnose“). */
   diagnoseId?: number;
   /** Verdacht laut Leitstelle bei der Alarmierung, z. B. „AKS“ (Liste „diagnose“). */

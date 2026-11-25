@@ -1,4 +1,4 @@
-import { AUSGANG_INFO, type AlarmBewertung, type Ausgang, type Einsatz, type Typ } from './types';
+import { ausgangUebertriage, type AlarmBewertung, type Ausgang, type AusgangAlt, type Einsatz, type Typ } from './types';
 
 /** NACA-Score I–VII mit kurzer Erläuterung für die Auswahl (`lang` für die Beispieltabelle). */
 export const NACA_INFO: { wert: number; roemisch: string; kurz: string; lang: string }[] = [
@@ -59,11 +59,11 @@ export interface BewertungsVorschlag {
  * Schlägt aus Ergebnis, NACA und Stichwort vor, ob zu hoch oder zu niedrig alarmiert wurde.
  * Nur ein Vorschlag: Die Bewertung setzt der Anwender selbst.
  */
-export function bewertungVorschlag(e: { typ: Typ; naca?: number | null; ausgang?: Ausgang | null }): BewertungsVorschlag | null {
-  if (e.ausgang && AUSGANG_INFO[e.ausgang].uebertriage) {
+export function bewertungVorschlag(e: { typ: Typ; naca?: number | null; ausgang?: Ausgang | AusgangAlt | null }): BewertungsVorschlag | null {
+  if (ausgangUebertriage(e.ausgang)) {
     return {
       bewertung: 'hoch',
-      grund: e.ausgang === 'transportdienst' ? 'Reiner Transport ohne Notfall.' : 'Keine medizinische Notlage.',
+      grund: 'Keine medizinische Notlage.',
     };
   }
   if (e.typ === 'N' && e.naca != null && e.naca <= NACA_LEICHT_MAX) {
@@ -77,9 +77,9 @@ export function bewertungVorschlag(e: { typ: Typ; naca?: number | null; ausgang?
 
 /**
  * Gilt für die Auswertung: die eigene Bewertung, sonst „zu hoch“ bei Ergebnissen,
- * die per Definition kein Rettungsmittel gebraucht hätten (Nur Transport, Hilfeleistung).
+ * die per Definition kein Rettungsmittel gebraucht hätten (Sonstige Hilfeleistung).
  */
 export function bewertungVon(e: Pick<Einsatz, 'alarmBewertung' | 'ausgang'>): AlarmBewertung | null {
   if (e.alarmBewertung) return e.alarmBewertung;
-  return e.ausgang && AUSGANG_INFO[e.ausgang].uebertriage ? 'hoch' : null;
+  return ausgangUebertriage(e.ausgang) ? 'hoch' : null;
 }

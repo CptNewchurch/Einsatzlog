@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { migriereAusgang } from '../domain/ausgangMigration';
 import type { Dienst, Einsatz, KatalogEintrag, Uebung } from '../domain/types';
 
 export interface MetaEintrag {
@@ -29,6 +30,23 @@ export class EinsatzDB extends Dexie {
       uebungen: '++id, beginn, dienstId, artId',
       meta: 'key',
     });
+    // Version 3: Ergebnisse neu gefasst (Transport, Ambulant, Verweigerung, Tod, Hilfeleistung). „Lehnt ab“ wird zu „Transportverweigerung“; die übrigen alten Ergebnisse bleiben und werden in der App zur Prüfung markiert.
+    this.version(3)
+      .stores({
+        dienste: '++id, beginn',
+        einsaetze: '++id, dienstId, alarm, typ',
+        katalog: '++id, typ, name',
+        uebungen: '++id, beginn, dienstId, artId',
+        meta: 'key',
+      })
+      .upgrade((tx) =>
+        tx
+          .table<Einsatz, number>('einsaetze')
+          .toCollection()
+          .modify((e) => {
+            Object.assign(e, migriereAusgang(e));
+          }),
+      );
   }
 }
 

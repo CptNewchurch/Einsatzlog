@@ -63,10 +63,10 @@ describe('Stichworte der AAO', () => {
   });
 
   it('bringt ab Stand 3 nur die neuen Stichworte mit', () => {
-    const neu = seedEintraege(3);
-    expect(neu.every((k) => k.typ === 'kategorie')).toBe(true);
+    const neu = seedEintraege(3).filter((k) => k.typ === 'kategorie');
     expect(neu.map((k) => k.name)).toEqual(KATEGORIEN_FW.map((k) => k.name));
-    expect(seedEintraege(4)).toEqual([]);
+    expect(seedEintraege(4).every((k) => k.typ === 'hilfeleistung')).toBe(true);
+    expect(seedEintraege(5)).toEqual([]);
   });
 });
 

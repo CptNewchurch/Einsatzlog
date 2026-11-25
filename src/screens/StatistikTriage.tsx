@@ -1,9 +1,10 @@
 import { NACA_GRUPPE_INFO, NACA_INFO, NACA_LEICHT_MAX, NACA_NOTARZT_AB } from '../domain/triage';
 import { transportZahlen, type TriageStatistik } from '../domain/triageStats';
 import { fmtZahl } from '../domain/time';
-import { AUSGANG_INFO, BEWERTUNG_INFO, BEWERTUNGEN, type Ausgang } from '../domain/types';
+import { AUSGANG_INFO, BEWERTUNG_INFO, BEWERTUNGEN, type Ausgang, type AusgangAlt } from '../domain/types';
+import { ausgangName, istAusgangAlt } from '../domain/ausgangMigration';
 import { Balken, ChartKarte } from '../ui/charts';
-import { Abschnitt } from '../ui/controls';
+import { Abschnitt, Meldung } from '../ui/controls';
 import { Kpi, KpiRaster } from '../ui/kpi';
 import { prozent } from '../ui/zahlen';
 
@@ -35,11 +36,11 @@ export function TriageAbschnitte({ t, zeitraum }: Props) {
 }
 
 function ErgebnisAbschnitt({ t, zeitraum }: Props) {
-  const anzahl = (a: Ausgang) => t.ergebnis.find((e) => e.ausgang === a)?.n ?? 0;
+  const anzahl = (a: Ausgang | AusgangAlt) => t.ergebnis.find((e) => e.ausgang === a)?.n ?? 0;
   const fehleinsaetze = t.fehleinsaetzeRd + t.fehleinsaetzeFw;
-  const ohneNotfall = anzahl('transportdienst') + anzahl('hilfeleistung');
-  // Transporte insgesamt, auch die mit und ohne NA; „Ambulant versorgt“ bleibt davon getrennt.
-  const { gesamt: transporte, mitNa, ohneNa } = transportZahlen(t.ergebnis);
+  const hilfeleistungen = anzahl('hilfeleistung');
+  // Transporte insgesamt, aufgeteilt nach NA; ambulante Versorgung (Transportverzicht) bleibt davon getrennt.
+  const { gesamt: transporte, mitNa, ohneNa, ambulant, ambulantNa, ambulantRtw, tod } = transportZahlen(t.ergebnis);
   const alle = t.rd + t.fw;
 
   if (t.rd === 0) {
@@ -55,23 +56,32 @@ function ErgebnisAbschnitt({ t, zeitraum }: Props) {
   const zeilen = t.ergebnis
     .filter((e) => e.n > 0)
     .map((e) => ({
-      label: e.ausgang ? AUSGANG_INFO[e.ausgang].kurz : 'Nicht erfasst',
+      label: e.ausgang ? (istAusgangAlt(e.ausgang) ? `${ausgangName(e.ausgang)} (alt, prüfen)` : ausgangName(e.ausgang)) : 'Nicht erfasst',
       wert: e.n,
       ton: e.ausgang ? ('rd' as const) : ('neutral' as const),
       zusatz: `(${prozent(e.n, t.rd)})`,
     }));
   // Die Reihenfolge der Auswahl im Formular beibehalten, „Nicht erfasst“ zuletzt.
-  const reihenfolge = (l: string) => (l === 'Nicht erfasst' ? 99 : Object.values(AUSGANG_INFO).findIndex((i) => i.kurz === l));
+  const reihenfolge = (l: string) => {
+    if (l === 'Nicht erfasst') return 99;
+    const i = Object.values(AUSGANG_INFO).findIndex((x) => x.kurz === l);
+    return i >= 0 ? i : 50;
+  };
   zeilen.sort((a, b) => reihenfolge(a.label) - reihenfolge(b.label));
 
   return (
     <Abschnitt titel="Ergebnis der Einsätze">
       {t.ergebnisErfasst === 0 ? (
         <p className="hinweis">
-          In {zeitraum} ist noch bei keinem Rettungsdiensteinsatz ein Ergebnis erfasst. Du trägst es im Einsatz unter „Ergebnis und Befund“ ein: Transport, ambulant versorgt, Fehleinsatz und mehr.
+          In {zeitraum} ist noch bei keinem Rettungsdiensteinsatz ein Ergebnis erfasst. Du trägst es im Einsatz unter „Ergebnis und Befund“ ein: Transport, ambulante Versorgung, Fehleinsatz und mehr.
         </p>
       ) : (
         <>
+          {t.ergebnisPruefen > 0 && (
+            <Meldung art="warnung">
+              {t.ergebnisPruefen === 1 ? 'Bei einem Einsatz' : `Bei ${fmtZahl(t.ergebnisPruefen)} Einsätzen`} ist das Ergebnis zu prüfen: Es gibt das gespeicherte Ergebnis so nicht mehr, oder es lässt sich jetzt genauer angeben. Bis dahin zählen sie in ihrer groben Gruppe mit. In der Einsatzliste findest du sie mit dem Filter „Ergebnis prüfen“.
+            </Meldung>
+          )}
           <KpiRaster>
             <Kpi
               wert={fmtZahl(transporte)}
@@ -89,8 +99,25 @@ function ErgebnisAbschnitt({ t, zeitraum }: Props) {
                 </>
               }
             />
-            <Kpi wert={fmtZahl(anzahl('ambulant'))} label="Ambulant versorgt" ton="rd" zusatz={`${prozent(anzahl('ambulant'), t.ergebnisErfasst)} der erfassten`} />
-            <Kpi wert={fmtZahl(ohneNotfall)} label="Ohne Notfall" ton="rd" zusatz="Nur Transport oder Hilfeleistung" />
+            <Kpi
+              wert={fmtZahl(ambulant)}
+              label="Ambulant versorgt"
+              ton="rd"
+              zusatz={
+                <>
+                  {prozent(ambulant, t.ergebnisErfasst)} der erfassten
+                  {ambulant > 0 && (
+                    <>
+                      <br />
+                      davon {fmtZahl(ambulantNa)}&nbsp;NA, {fmtZahl(ambulantRtw)}&nbsp;RTW
+                    </>
+                  )}
+                </>
+              }
+            />
+            <Kpi wert={fmtZahl(anzahl('verweigerung'))} label="Transportverweigerung" ton="rd" zusatz={`${prozent(anzahl('verweigerung'), t.ergebnisErfasst)} der erfassten`} />
+            <Kpi wert={fmtZahl(tod)} label="Todesfälle" ton="rd" zusatz={`${fmtZahl(anzahl('todEinsatzstelle'))} an der Einsatzstelle, ${fmtZahl(anzahl('todAufgefunden'))} aufgefunden`} />
+            <Kpi wert={fmtZahl(hilfeleistungen)} label="Sonstige Hilfeleistung" ton="rd" zusatz="Ohne Notfall" />
             <Kpi wert={fmtZahl(fehleinsaetze)} label="Fehleinsätze" zusatz={`${prozent(fehleinsaetze, alle)} der Einsätze`} />
           </KpiRaster>
           <ChartKarte
@@ -103,6 +130,15 @@ function ErgebnisAbschnitt({ t, zeitraum }: Props) {
           >
             <Balken zeilen={zeilen} />
           </ChartKarte>
+          {t.hilfeleistungen.length > 0 && (
+            <ChartKarte
+              titel="Sonstige Hilfeleistungen"
+              untertitel={`${fmtZahl(hilfeleistungen)} ${hilfeleistungen === 1 ? 'Einsatz' : 'Einsätze'} nach Stichwort`}
+              tabelle={{ kopf: ['Stichwort', 'Anzahl'], zeilen: t.hilfeleistungen.map((h) => [h.name, h.n]) }}
+            >
+              <Balken zeilen={t.hilfeleistungen.map((h) => ({ label: h.name, wert: h.n, ton: 'rd' as const, zusatz: `(${prozent(h.n, hilfeleistungen)})` }))} />
+            </ChartKarte>
+          )}
         </>
       )}
     </Abschnitt>

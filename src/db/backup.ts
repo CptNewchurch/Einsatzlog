@@ -1,4 +1,5 @@
 import { db } from './db';
+import { migriereAusgang } from '../domain/ausgangMigration';
 import { mergeEinstellungen, speichereEinstellungen, spiegleTheme } from './einstellungen';
 import { sorgeFuerStartlisten } from './seed';
 import { istAlarmstufe } from '../domain/alarmstufe';
@@ -6,7 +7,7 @@ import { TYPEN, type Dienst, type Einsatz, type Einstellungen, type KatalogEintr
 
 export const BACKUP_APP = 'einsatzlog';
 /** 2 = mit Übungen und Feuerwehr-Maßnahmen. Sicherungen der Version 1 lassen sich weiterhin einspielen. */
-export const BACKUP_VERSION = 2;
+export const BACKUP_VERSION = 3;
 
 /** Stand der Startlisten in Sicherungen der Version 1 (App 1.0.0). */
 const SEED_STAND_VERSION_1 = 2;
@@ -29,6 +30,7 @@ export interface BackupDatei {
 export class BackupFehler extends Error {}
 
 const KATALOG_TYPEN = [
+  'hilfeleistung',
   'kategorie',
   'rolle',
   'fahrzeug',
@@ -123,6 +125,9 @@ export function pruefeBackup(roh: unknown): BackupDatei {
       (e.status2 != null && (!istZahl(e.status2) || e.status2 < e.status1)) ||
       // Neu in 1.5.0; ältere Sicherungen haben das Feld nicht.
       (e.folgeAusStatus1 != null && typeof e.folgeAusStatus1 !== 'boolean') ||
+      // Ergebnis und Hilfeleistung: Ergebnisse aus 1.4 bis 1.6 werden beim Einlesen umgestellt (Version 3).
+      (e.ausgang != null && typeof e.ausgang !== 'string') ||
+      (e.hilfeleistungId != null && !istZahl(e.hilfeleistungId)) ||
       // Die Alarmstufe kam später dazu; ältere Sicherungen haben sie nicht.
       (e.alarmstufe != null && !istAlarmstufe(e.alarmstufe))
     ) {
@@ -171,7 +176,7 @@ export function pruefeBackup(roh: unknown): BackupDatei {
     seedVersion: istZahl(roh.seedVersion) ? roh.seedVersion : SEED_STAND_VERSION_1,
     daten: {
       dienste,
-      einsaetze: daten.einsaetze as unknown as Einsatz[],
+      einsaetze: (daten.einsaetze as unknown as Einsatz[]).map(migriereAusgang),
       katalog: daten.katalog as unknown as KatalogEintrag[],
       uebungen: rohUebungen as unknown as Uebung[],
       einstellungen: mergeEinstellungen(daten.einstellungen),

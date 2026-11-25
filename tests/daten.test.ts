@@ -342,6 +342,31 @@ describe('Sicherung', () => {
     expect(await erzeugeBackup(1_700_000_000_000)).toEqual(vorher);
   });
 
+  it('Sonstige Hilfeleistung: Stichwort wird mit der Startliste angelegt, gespeichert und gesichert', async () => {
+    await sorgeFuerStartlisten();
+    const { dienstId, chir } = await beispielDaten();
+    const tragehilfe = (await db.katalog.where('typ').equals('hilfeleistung').toArray()).find((k) => k.name === 'Tragehilfe');
+    expect(tragehilfe).toBeDefined();
+    const id = await speichereEinsatz({ dienstId, typ: 'R', kategorieId: chir.id!, kraefteRtw: 1, kraefteNef: 0, alarm: T('2026-11-14', 16), status1: T('2026-11-14', 16, 20), ausgang: 'hilfeleistung', hilfeleistungId: tragehilfe!.id });
+    const sicherung = await erzeugeBackup(1_700_000_000_000);
+    await loescheAlleDaten();
+    await stelleWiederHer(leseBackupText(JSON.stringify(sicherung)));
+    expect(await db.einsaetze.get(id)).toMatchObject({ ausgang: 'hilfeleistung', hilfeleistungId: tragehilfe!.id });
+  });
+
+  it('Eine Sicherung aus 1.6.0 behält veraltete Ergebnisse zur Prüfung und benennt „Lehnt ab“ um', async () => {
+    const { dienstId, chir } = await beispielDaten();
+    const basis = { dienstId, typ: 'R' as const, kategorieId: chir.id!, kraefteRtw: 1, kraefteNef: 0 };
+    const a = await speichereEinsatz({ ...basis, alarm: T('2026-11-14', 9), status1: T('2026-11-14', 9, 30), ausgang: 'transport' as never });
+    const b = await speichereEinsatz({ ...basis, alarm: T('2026-11-14', 11), status1: T('2026-11-14', 11, 30), ausgang: 'abgelehnt' as never });
+    const sicherung = JSON.parse(JSON.stringify(await erzeugeBackup(1_700_000_000_000)));
+    sicherung.version = 2;
+    await loescheAlleDaten();
+    await stelleWiederHer(leseBackupText(JSON.stringify(sicherung)));
+    expect((await db.einsaetze.get(a))?.ausgang).toBe('transport');
+    expect((await db.einsaetze.get(b))?.ausgang).toBe('verweigerung');
+  });
+
   it('Hin- und Rückweg erhält „Danach aus Status 1 alarmiert“, und ein falscher Wert wird abgelehnt', async () => {
     const { dienstId, chir } = await beispielDaten();
     const basis = { dienstId, typ: 'R' as const, kategorieId: chir.id!, kraefteRtw: 1, kraefteNef: 0 };

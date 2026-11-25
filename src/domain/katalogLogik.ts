@@ -30,6 +30,9 @@ export function nutzung(
       einsaetze.forEach((e) => new Set((e.massnahmen ?? []).map((x) => x.massnahmeId)).forEach(plus));
       uebungen.forEach((u) => new Set((u.massnahmen ?? []).map((x) => x.massnahmeId)).forEach(plus));
       break;
+    case 'hilfeleistung':
+      einsaetze.forEach((e) => plus(e.hilfeleistungId));
+      break;
     case 'diagnose':
       einsaetze.forEach((e) => new Set([e.diagnoseId, e.leitstelleDiagnoseId]).forEach(plus));
       break;

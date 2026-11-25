@@ -24,6 +24,7 @@ import {
   type AlarmBewertung,
   type Altersgruppe,
   type Ausgang,
+  type AusgangAlt,
   type Dienst,
   type Einsatz,
   type MassnahmeEintrag,
@@ -39,6 +40,7 @@ import { Abschnitt, Aufklappen, Chip, ChipReihe, Feld, Knopf, Leer, Meldung, Seg
 import { DienstWahl } from '../ui/dienstwahl';
 import { EinsatzartReihe } from '../ui/einsatzart';
 import { KatalogAuswahl } from '../ui/katalogwahl';
+import { AUSGANG_ALT_INFO, istAusgangAlt } from '../domain/ausgangMigration';
 import { ohneLeere, useKatalogListe } from '../ui/katalogListen';
 import { Bestaetigung, useToast } from '../ui/overlays';
 import { Seite } from '../ui/seite';
@@ -71,6 +73,9 @@ interface FormState {
   alter: Altersgruppe | null;
   notarzt: boolean | null;
   ausgang: Ausgang | null;
+  /** Ein veraltetes Ergebnis aus 1.4 bis 1.6, solange noch kein neues gewählt ist. */
+  ausgangAlt: AusgangAlt | null;
+  hilfe: number[];
   /** Verdachtsdiagnose vor Ort (höchstens eine). */
   diagnose: number[];
   /** Verdacht laut Leitstelle (höchstens einer). */
@@ -108,6 +113,8 @@ function neuerEntwurf(dienst: Dienst): FormState {
     alter: null,
     notarzt: null,
     ausgang: null,
+    ausgangAlt: null,
+    hilfe: [],
     diagnose: [],
     leitstelle: [],
     bewertung: null,
@@ -146,7 +153,9 @@ function ausEinsatz(e: Einsatz): FormState {
     naca: e.naca ?? null,
     alter: e.altersgruppe ?? null,
     notarzt: e.notarztVorOrt ?? null,
-    ausgang: e.ausgang ?? null,
+    ausgang: e.ausgang && !istAusgangAlt(e.ausgang) ? e.ausgang : null,
+    ausgangAlt: istAusgangAlt(e.ausgang) ? e.ausgang : null,
+    hilfe: e.hilfeleistungId != null ? [e.hilfeleistungId] : [],
     diagnose: e.diagnoseId != null ? [e.diagnoseId] : [],
     leitstelle: e.leitstelleDiagnoseId != null ? [e.leitstelleDiagnoseId] : [],
     bewertung: e.alarmBewertung ?? null,
@@ -168,6 +177,7 @@ function inhaltVorhanden(f: FormState): boolean {
     f.ort ||
     f.tagIds.length ||
     f.ausgang ||
+    f.ausgangAlt ||
     f.diagnose.length ||
     f.leitstelle.length
   );
@@ -358,6 +368,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
   const ressourcen = useKatalogListe('ressource');
   const tags = useKatalogListe('tag');
   const diagnosen = useKatalogListe('diagnose');
+  const hilfeleistungen = useKatalogListe('hilfeleistung');
 
   /* ---- Zeiten ---- */
   const alarmP = parseUhrzeit(f.alarm);
@@ -436,6 +447,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       nef: k?.nef ?? 0,
       // Zwischen Rettungsdienst und Feuerwehr passen nur Fehleinsätze zu beiden.
       ausgang: wechselt && f.ausgang !== 'fehleinsatz' ? null : f.ausgang,
+      ausgangAlt: wechselt ? null : f.ausgangAlt,
       massnahmen,
     });
     if (verworfen > 0) {
@@ -456,10 +468,10 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
   /** Ein Ergebnis mit Notarzt (Transport mit NA, Transport ohne NA) setzt „Notarzt vor Ort“ auf Ja. */
   const waehleAusgang = (ausgang: Ausgang | null) => {
     if (ausgangBrauchtNotarzt(ausgang) && f.notarzt !== true) {
-      set({ ausgang, notarzt: true });
+      set({ ausgang, ausgangAlt: null, notarzt: true });
       toast.zeige('„Notarzt vor Ort“ auf Ja gesetzt');
     } else {
-      set({ ausgang });
+      set({ ausgang, ausgangAlt: null });
     }
   };
 
@@ -495,7 +507,8 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       naca: rd && !fehleinsatz ? (f.naca ?? undefined) : undefined,
       altersgruppe: rd && !fehleinsatz ? (f.alter ?? undefined) : undefined,
       notarztVorOrt: rd && !fehleinsatz ? (f.notarzt ?? undefined) : undefined,
-      ausgang: rd || f.ausgang === 'fehleinsatz' ? (f.ausgang ?? undefined) : undefined,
+      ausgang: rd || f.ausgang === 'fehleinsatz' ? (f.ausgang ?? (rd ? f.ausgangAlt : null) ?? undefined) : undefined,
+      hilfeleistungId: rd && f.ausgang === 'hilfeleistung' ? f.hilfe[0] : undefined,
       diagnoseId: rd && !fehleinsatz ? f.diagnose[0] : undefined,
       leitstelleDiagnoseId: rd && !fehleinsatz ? f.leitstelle[0] : undefined,
       alarmBewertung: rd && !fehleinsatz ? (f.bewertung ?? undefined) : undefined,
@@ -545,7 +558,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       ? 'Fehleinsatz'
       : bereich === 'RD'
       ? [
-          f.ausgang ? AUSGANG_INFO[f.ausgang].kurz : '',
+          f.ausgang ? AUSGANG_INFO[f.ausgang].kurz : f.ausgangAlt ? 'Ergebnis prüfen' : '',
           f.naca != null ? `NACA ${NACA_INFO[f.naca - 1]?.roemisch ?? ''}` : '',
           katalogName(daten, f.diagnose[0]),
         ]
@@ -720,6 +733,21 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       {bereich === 'RD' && (
         <Aufklappen titel="Ergebnis und Befund" zusatz={ergebnisSumme || undefined} offen={ergebnisOffen} onToggle={() => setErgebnisOffen((o) => !o)}>
           <AusgangWahl wert={f.ausgang} onChange={waehleAusgang} />
+          {f.ausgangAlt && <Meldung art="warnung">{AUSGANG_ALT_INFO[f.ausgangAlt].hinweis}</Meldung>}
+          {f.ausgang === 'hilfeleistung' && (
+            <KatalogAuswahl
+              label="Stichwort der Hilfeleistung"
+              katalogTyp="hilfeleistung"
+              vorschlaege={hilfeleistungen.vorschlaege}
+              alle={hilfeleistungen.alle}
+              ausgewaehlt={f.hilfe}
+              onChange={(ids) => set({ hilfe: ids })}
+              klein
+              nutzung={hilfeleistungen.zaehler}
+              namenAusgewaehlt={hilfeleistungen.namen}
+              hinweis="Was du geleistet hast. Was fehlt, legst du mit „+ Neu“ an."
+            />
+          )}
           {fehleinsatz ? (
             <p className="hinweis">Bei einem Fehleinsatz entfallen Befund, Maßnahmen und Bewertung.</p>
           ) : (

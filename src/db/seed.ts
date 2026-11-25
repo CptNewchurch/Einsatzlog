@@ -266,6 +266,9 @@ export const UEBUNGSARTEN: { name: string; bereich?: Bereich }[] = [
   { name: 'Dienstsport' },
 ];
 
+/** Stichwörter für „Sonstige Hilfeleistung“; die Liste wächst beim Erfassen mit. */
+const HILFELEISTUNGEN = ['Tragehilfe', 'Aufstehhilfe', 'Türöffnung', 'Sturz ohne Verletzung', 'Krankentransport', 'Verlegung', 'Betreuung', 'Absicherung'];
+
 /**
  * Stand der Startlisten. Jede Version ergänzt nur, was neu ist; bereits vorhandene Einträge
  * (auch selbst angelegte) bleiben unangetastet.
@@ -273,8 +276,9 @@ export const UEBUNGSARTEN: { name: string; bereich?: Bereich }[] = [
  *  2 = Verdachtsdiagnosen
  *  3 = Feuerwehr-Maßnahmen und Übungsarten
  *  4 = Feuerwehr-Stichworte nach der AAO; sie lösen die vorläufigen Vorschläge ab
+ *  5 = Stichwörter für die „Sonstige Hilfeleistung“ im Rettungsdienst
  */
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 
 type Neu = Omit<KatalogEintrag, 'id'>;
 
@@ -302,7 +306,8 @@ export function seedEintraege(ab = 0): Neu[] {
     ...UEBUNGSARTEN.map((u): Neu => ({ typ: 'uebungsart', name: u.name, aktiv: true, ...(u.bereich ? { bereich: u.bereich } : {}) })),
   ];
   const v4: Neu[] = KATEGORIEN_FW.map((k): Neu => ({ typ: 'kategorie', name: k.name, aktiv: true, typen: [...k.typen] }));
-  return [...(ab < 1 ? v1 : []), ...(ab < 2 ? v2 : []), ...(ab < 3 ? v3 : []), ...(ab < 4 ? v4 : [])];
+  const v5: Neu[] = HILFELEISTUNGEN.map((name): Neu => ({ typ: 'hilfeleistung', name, aktiv: true }));
+  return [...(ab < 1 ? v1 : []), ...(ab < 2 ? v2 : []), ...(ab < 3 ? v3 : []), ...(ab < 4 ? v4 : []), ...(ab < 5 ? v5 : [])];
 }
 
 /**

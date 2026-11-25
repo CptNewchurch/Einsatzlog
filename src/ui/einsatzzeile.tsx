@@ -2,7 +2,8 @@ import { stufeText, stufeVon } from '../domain/alarmstufe';
 import { kraefteText } from '../domain/stichwort';
 import { fmtDatumKurz, fmtDauer, fmtZeit, minutenZwischen } from '../domain/time';
 import { bewertungVon, NACA_INFO } from '../domain/triage';
-import { AUSGANG_INFO, bereichVon, type Einsatz } from '../domain/types';
+import { ausgangName, ergebnisHinweis } from '../domain/ausgangMigration';
+import { bereichVon, type Einsatz } from '../domain/types';
 import { einsatzTitel, katalogName, useDaten } from '../state/daten';
 
 interface Props {
@@ -17,7 +18,8 @@ export function EinsatzZeile({ einsatz: e, mitDatum }: Props) {
   const stufe = stufeVon(e, katalogName(d, e.kategorieId)).stufe;
   const dauer = minutenZwischen(e.alarm, e.status1);
   const marken: string[] = [];
-  if (e.ausgang) marken.push(AUSGANG_INFO[e.ausgang].kurz);
+  if (e.ausgang) marken.push(ausgangName(e.ausgang));
+  if (ergebnisHinweis(e)) marken.push('Ergebnis prüfen');
   if (e.naca != null) marken.push(`NACA ${NACA_INFO[e.naca - 1]?.roemisch ?? e.naca}`);
   if (e.diagnoseId != null) marken.push(katalogName(d, e.diagnoseId));
   if (e.leitstelleDiagnoseId != null && e.leitstelleDiagnoseId !== e.diagnoseId) marken.push(`Leitstelle: ${katalogName(d, e.leitstelleDiagnoseId)}`);

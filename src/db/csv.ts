@@ -1,10 +1,10 @@
+import { ausgangName, ergebnisHinweis } from '../domain/ausgangMigration';
 import { stufeVon } from '../domain/alarmstufe';
 import { berechneDienstZeiten, dienstSaldo } from '../domain/zeiten';
 import { BEREICH_NAME, stichwortText } from '../domain/stichwort';
 import { fmtDatum, fmtZeit, MIN } from '../domain/time';
 import { NACA_GRUPPE_INFO, NACA_INFO, bewertungVon, nacaGruppe } from '../domain/triage';
 import {
-  AUSGANG_INFO,
   BEWERTUNG_INFO,
   DIENSTART_NAME,
   DURCHFUEHRUNG_INFO,
@@ -49,7 +49,7 @@ export function erzeugeEinsaetzeCsv(
     'Typ', 'Stichwort', 'MIG', 'Kräfteansatz', 'Alarmstufe', 'Dienst', 'Dienstart', 'Wache / Standort', 'Fahrzeug', 'Rolle',
     'Nachalarmiert', 'Nachforderungen', 'Ergebnis', 'NACA', 'NACA-Gruppe', 'Verdachtsdiagnose', 'Laut Leitstelle',
     'Bewertung Alarmierung', 'Altersgruppe', 'Notarzt vor Ort',
-    'Maßnahmen', 'Atemschutz', 'Atemschutz (min)', 'Ort', 'Tags', 'Notiz', 'Danach aus Status 1 alarmiert',
+    'Maßnahmen', 'Atemschutz', 'Atemschutz (min)', 'Ort', 'Tags', 'Notiz', 'Danach aus Status 1 alarmiert', 'Hilfeleistung (Stichwort)', 'Ergebnis prüfen',
   ];
   const zeilen = [...einsaetze]
     .sort((a, b) => a.alarm - b.alarm)
@@ -75,7 +75,7 @@ export function erzeugeEinsaetzeCsv(
         name(e.rolleId),
         e.nachalarmiert ? true : '',
         (e.nachforderungen ?? []).map((n) => `${name(n.ressourceId)}${n.vonMir ? ' (von mir)' : ''}`).join(', '),
-        e.ausgang ? AUSGANG_INFO[e.ausgang].kurz : '',
+        e.ausgang ? ausgangName(e.ausgang) : '',
         e.naca != null ? (NACA_INFO[e.naca - 1]?.roemisch ?? '') : '',
         e.naca != null ? NACA_GRUPPE_INFO[nacaGruppe(e.naca)].kurz : '',
         name(e.diagnoseId),
@@ -93,6 +93,8 @@ export function erzeugeEinsaetzeCsv(
         (e.tagIds ?? []).map(name).join(', '),
         e.notiz ?? '',
         e.status2 == null && e.folgeAusStatus1 ? true : '',
+        e.ausgang === 'hilfeleistung' ? name(e.hilfeleistungId) : '',
+        ergebnisHinweis(e) ? true : '',
       ];
     });
   return csvText(kopf, zeilen);

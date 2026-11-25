@@ -1,5 +1,6 @@
 import { bewertungVon, NACA_GRUPPEN, NACA_INFO, NACA_LEICHT_MAX, NACA_NOTARZT_AB, nacaGruppe, type NacaGruppe } from './triage';
-import { AUSGAENGE_RD, bereichVon, BEWERTUNGEN, type AlarmBewertung, type Ausgang, type Einsatz, type KatalogEintrag } from './types';
+import { ergebnisHinweis } from './ausgangMigration';
+import { AUSGAENGE_RD, bereichVon, BEWERTUNGEN, type AlarmBewertung, type Ausgang, type AusgangAlt, type Einsatz, type KatalogEintrag } from './types';
 
 /** Auswertung von Ergebnis, Schweregrad (NACA), Diagnosen und der Frage, ob die Alarmierung zum Befund passte. */
 
@@ -27,8 +28,12 @@ export interface TriageStatistik {
   rd: number;
   fw: number;
   /** Ergebnis der Rettungsdiensteinsätze; `null` heißt „nicht erfasst“. */
-  ergebnis: { ausgang: Ausgang | null; n: number }[];
+  ergebnis: { ausgang: Ausgang | AusgangAlt | null; n: number }[];
+  /** Einsätze, deren Ergebnis zu prüfen ist (veraltet oder ohne Stichwort). */
+  ergebnisPruefen: number;
   ergebnisErfasst: number;
+  /** Sonstige Hilfeleistungen nach Stichwort, häufigste zuerst; ohne Stichwort unter „Ohne Stichwort“. */
+  hilfeleistungen: { name: string; n: number }[];
   fehleinsaetzeRd: number;
   fehleinsaetzeFw: number;
   /** Verteilung des NACA-Scores I–VII. */
@@ -43,7 +48,7 @@ export interface TriageStatistik {
   /** Häufigste Verdachtsdiagnosen vor Ort. */
   diagnosen: DiagnoseWert[];
   diagnosenErfasst: number;
-  /** Eigene Bewertung der Alarmierung; „Nur Transport“ und „Hilfeleistung“ zählen von selbst als zu hoch. */
+  /** Eigene Bewertung der Alarmierung; „Sonstige Hilfeleistung“ zählt von selbst als zu hoch. */
   bewertung: Record<AlarmBewertung, number>;
   bewertet: number;
   /** Einsätze, bei denen Leitstellen-Verdacht und Diagnose vor Ort beide erfasst sind. */
@@ -54,28 +59,49 @@ export interface TriageStatistik {
 }
 
 /**
- * Transporte insgesamt, mit der Aufteilung nach Notarzt (NA). „Ambulant versorgt“ zählt nicht dazu.
- * Der einfache „Transport“ gehört zur Gesamtzahl, steht aber nicht unter „davon“.
+ * Transporte insgesamt, aufgeteilt nach Notarztbegleitung (NA). Ambulante Versorgung (Transportverzicht)
+ * zählt nicht dazu; ihre Summe steht getrennt, mit der Aufteilung nach NA und RTW.
  */
-export function transportZahlen(ergebnis: TriageStatistik['ergebnis']): { gesamt: number; mitNa: number; ohneNa: number } {
-  const n = (a: Ausgang) => ergebnis.find((e) => e.ausgang === a)?.n ?? 0;
+export function transportZahlen(ergebnis: TriageStatistik['ergebnis']): {
+  gesamt: number;
+  mitNa: number;
+  ohneNa: number;
+  ambulant: number;
+  ambulantNa: number;
+  ambulantRtw: number;
+  tod: number;
+} {
+  const n = (a: Ausgang | AusgangAlt) => ergebnis.find((e) => e.ausgang === a)?.n ?? 0;
+  // Veraltete Ergebnisse zählen mit, bis du sie genauer erfasst hast: „Transport“ als Transport ohne Angabe, „Verstorben“ als Tod.
   const mitNa = n('transportMitNotarzt');
   const ohneNa = n('transportOhneNotarzt');
-  return { gesamt: n('transport') + mitNa + ohneNa, mitNa, ohneNa };
+  const ambulantNa = n('ambulantNotarzt');
+  const ambulantRtw = n('ambulantRtw');
+  return {
+    gesamt: mitNa + ohneNa + n('transport'),
+    mitNa,
+    ohneNa,
+    ambulant: ambulantNa + ambulantRtw + n('ambulant'),
+    ambulantNa,
+    ambulantRtw,
+    tod: n('todEinsatzstelle') + n('todAufgefunden') + n('verstorben'),
+  };
 }
 
 const istNaca = (n: number | undefined): n is number => n != null && Number.isInteger(n) && n >= 1 && n <= NACA_INFO.length;
 
 export function berechneTriage(einsaetze: readonly Einsatz[], katalog: ReadonlyMap<number, KatalogEintrag>): TriageStatistik {
   const name = (id: number) => katalog.get(id)?.name ?? '?';
-  const ergebnis = new Map<Ausgang | null, number>([[null, 0], ...AUSGAENGE_RD.map((a): [Ausgang, number] => [a, 0])]);
+  const ergebnis = new Map<Ausgang | AusgangAlt | null, number>([[null, 0], ...AUSGAENGE_RD.map((a): [Ausgang, number] => [a, 0])]);
   const naca = NACA_INFO.map((n) => ({ wert: n.wert, roemisch: n.roemisch, n: 0 }));
   const gruppen = new Map<NacaGruppe, { r: number; n: number }>(NACA_GRUPPEN.map((g) => [g, { r: 0, n: 0 }]));
   const diagnosen = new Map<number, number>();
+  const hilfe = new Map<string, number>();
   const paare = new Map<string, Abweichung>();
   const bewertung = Object.fromEntries(BEWERTUNGEN.map((b) => [b, 0])) as Record<AlarmBewertung, number>;
   const notarztBeiLeicht: Anteil = { n: 0, von: 0 };
   const rtwBeiSchwer: Anteil = { n: 0, von: 0 };
+  let pruefen = 0;
   let rd = 0;
   let fw = 0;
   let fehleinsaetzeRd = 0;
@@ -91,8 +117,13 @@ export function berechneTriage(einsaetze: readonly Einsatz[], katalog: ReadonlyM
     }
     rd += 1;
     const a = e.ausgang ?? null;
+    if (ergebnisHinweis(e)) pruefen += 1;
     ergebnis.set(a, (ergebnis.get(a) ?? 0) + 1);
     if (a === 'fehleinsatz') fehleinsaetzeRd += 1;
+    if (a === 'hilfeleistung') {
+      const h = e.hilfeleistungId != null ? name(e.hilfeleistungId) : 'Ohne Stichwort';
+      hilfe.set(h, (hilfe.get(h) ?? 0) + 1);
+    }
 
     if (istNaca(e.naca)) {
       naca[e.naca - 1].n += 1;
@@ -138,6 +169,8 @@ export function berechneTriage(einsaetze: readonly Einsatz[], katalog: ReadonlyM
     fw,
     ergebnis: [...ergebnis.entries()].map(([ausgang, n]) => ({ ausgang, n })),
     ergebnisErfasst: erfasst,
+    ergebnisPruefen: pruefen,
+    hilfeleistungen: [...hilfe].map(([h, n]) => ({ name: h, n })).sort((x, y) => y.n - x.n || x.name.localeCompare(y.name, 'de')),
     fehleinsaetzeRd,
     fehleinsaetzeFw,
     naca,

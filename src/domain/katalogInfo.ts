@@ -11,6 +11,7 @@ export interface KatalogInfo {
 export const KATALOG_REIHENFOLGE: KatalogTyp[] = [
   'kategorie',
   'diagnose',
+  'hilfeleistung',
   'massnahme',
   'fwmassnahme',
   'ressource',
@@ -32,6 +33,11 @@ export const KATALOG_INFO: Record<KatalogTyp, KatalogInfo> = {
     titel: 'Verdachtsdiagnosen',
     neu: 'Neue Diagnose',
     hinweis: 'Für „Verdachtsdiagnose“ und „Laut Leitstelle“ im Einsatz. Die Liste wächst beim Erfassen mit.',
+  },
+  hilfeleistung: {
+    titel: 'Hilfeleistungen',
+    neu: 'Neue Hilfeleistung',
+    hinweis: 'Stichwörter für das Ergebnis „Sonstige Hilfeleistung“, z. B. Tragehilfe oder Türöffnung. Die Liste wächst beim Erfassen mit.',
   },
   massnahme: {
     titel: 'Maßnahmen Rettungsdienst',

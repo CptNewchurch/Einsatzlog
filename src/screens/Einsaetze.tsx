@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { bewertungVon } from '../domain/triage';
-import { AUSGANG_INFO, bereichVon } from '../domain/types';
+import { ausgangName, ergebnisHinweis } from '../domain/ausgangMigration';
+import { bereichVon } from '../domain/types';
 import { einsatzTitel, katalogName, useDaten } from '../state/daten';
 import { Chip, ChipReihe, Leer } from '../ui/controls';
 import { datumLang } from '../ui/dienstzeile';
@@ -35,6 +36,7 @@ export function Einsaetze() {
   const [bereich, setBereich] = useState<Filter>('alle');
   const [jahr, setJahr] = useState<number | null>(null);
   const [offen, setOffen] = useState(false);
+  const [pruefen, setPruefen] = useState(false);
   const [anzahl, setAnzahl] = useState(SEITE);
   const nurUebungen = bereich === 'UE';
 
@@ -54,7 +56,8 @@ export function Einsaetze() {
         katalogName(daten, e.rolleId),
         ...(e.tagIds ?? []).map((t) => katalogName(daten, t)),
         ...(e.massnahmen ?? []).map((x) => katalogName(daten, x.massnahmeId)),
-        e.ausgang ? AUSGANG_INFO[e.ausgang].kurz : undefined,
+        e.ausgang ? ausgangName(e.ausgang) : undefined,
+        ergebnisHinweis(e) ? 'ergebnis prüfen' : undefined,
         katalogName(daten, e.diagnoseId),
         katalogName(daten, e.leitstelleDiagnoseId),
         // „zu hoch“ und „zu niedrig“ finden die Einsätze mit abweichender Alarmierung.
@@ -80,9 +83,10 @@ export function Einsaetze() {
         (bereich === 'alle' || bereichVon(e.typ) === bereich) &&
         (jahr == null || new Date(e.alarm).getFullYear() === jahr) &&
         (!offen || (e.status2 == null && !e.folgeAusStatus1)) &&
+        (!pruefen || ergebnisHinweis(e) != null) &&
         (!q || (heuhaufen.get(e.id!) ?? '').includes(q)),
     );
-  }, [einsaetze, suche, bereich, jahr, offen, heuhaufen]);
+  }, [einsaetze, suche, bereich, jahr, offen, pruefen, heuhaufen]);
 
   const trefferUebungen = useMemo(() => {
     const q = suche.trim().toLocaleLowerCase('de-DE');
@@ -141,6 +145,7 @@ export function Einsaetze() {
         {daten.einst.bereiche !== 'rd' && <Chip klein ton="fw" aktiv={bereich === 'FW'} onClick={() => setBereich(bereich === 'FW' ? 'alle' : 'FW')}>Feuerwehr</Chip>}
         <Chip klein ton="ue" aktiv={nurUebungen} onClick={() => setBereich(nurUebungen ? 'alle' : 'UE')}>Übung</Chip>
         {!nurUebungen && <Chip klein aktiv={offen} onClick={() => setOffen((o) => !o)}>Status 2 fehlt</Chip>}
+        {!nurUebungen && <Chip klein aktiv={pruefen} onClick={() => setPruefen((o) => !o)}>Ergebnis prüfen</Chip>}
       </ChipReihe>
       {jahre.length > 1 && (
         <ChipReihe label="Jahr">
