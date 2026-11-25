@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { speichereEinstellungen } from '../db/einstellungen';
 import { regionName, REGIONEN_MIT_DATEN } from '../domain/kompendium';
 import { normalisiereUhrzeit, parseUhrzeit } from '../domain/time';
-import type { ThemeWahl } from '../domain/types';
+import type { Bereiche, ThemeWahl } from '../domain/types';
 import { useDaten } from '../state/daten';
 import { Abschnitt, Segment, Toggle, ZeitFeld } from '../ui/controls';
 import { Seite } from '../ui/seite';
@@ -40,6 +40,27 @@ export function Einstellungen() {
             { wert: 'dark', label: 'Dunkel' },
           ]}
         />
+      </Abschnitt>
+
+      <Abschnitt titel="Bereiche">
+        <Segment<Bereiche>
+          label="Ich nutze die App für"
+          wert={einst.bereiche}
+          onChange={(bereiche) => void speichereEinstellungen({ bereiche })}
+          optionen={[
+            { wert: 'beide', label: 'Beides' },
+            { wert: 'rd', label: 'Rettungsdienst', ton: 'rd' },
+            { wert: 'fw', label: 'Feuerwehr', ton: 'fw' },
+          ]}
+        />
+        <p className="hinweis">
+          {einst.bereiche === 'rd'
+            ? 'Feuerwehr-Auswertung und -Listen sind ausgeblendet. Feuerwehr-Einsätze kannst du weiter erfassen, etwa wenn der RTW zu einem Brand oder einer Hilfeleistung alarmiert wird. Sie zählen dann nicht in der Statistik.'
+            : einst.bereiche === 'fw'
+              ? 'Rettungsdienst-Auswertung, -Listen und -Einsatzarten sind ausgeblendet.'
+              : 'Rettungsdienst und Feuerwehr werden getrennt ausgewertet.'}{' '}
+          Erfasste Daten bleiben immer erhalten.
+        </p>
       </Abschnitt>
 
       <Abschnitt titel="Dienst">

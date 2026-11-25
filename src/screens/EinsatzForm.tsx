@@ -385,14 +385,19 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
   };
   const zeigeZeit = (feld: 'alarm' | 'status1' | 'status2') => (versucht || f[feld] !== '' ? fehler[feld] : undefined);
 
+  // Bei einem Fehleinsatz entfallen Befund, Maßnahmen, Bewertung und Atemschutz. Eingetragenes bleibt im Formular
+  // erhalten, falls das Ergebnis wieder geändert wird, wird aber nicht gespeichert.
+  const fehleinsatz = f.ausgang === 'fehleinsatz';
+
   const fehlendeMassnahmen = useMemo(() => {
     const s = new Set<number>();
+    if (fehleinsatz) return s;
     f.massnahmen.forEach((m, i) => {
       const art = daten.katalogMap.get(m.massnahmeId)?.art;
       if (brauchtDurchfuehrung(art) && !m.durchfuehrung) s.add(i);
     });
     return s;
-  }, [f.massnahmen, daten.katalogMap]);
+  }, [f.massnahmen, daten.katalogMap, fehleinsatz]);
 
   const hatFehler = Object.values(fehler).some(Boolean) || fehlendeMassnahmen.size > 0;
 
@@ -487,16 +492,16 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       ortGrob: f.ort.trim() || undefined,
       notiz: f.notiz.trim() || undefined,
       tagIds: f.tagIds.length > 0 ? f.tagIds : undefined,
-      naca: rd ? (f.naca ?? undefined) : undefined,
-      altersgruppe: rd ? (f.alter ?? undefined) : undefined,
-      notarztVorOrt: rd ? (f.notarzt ?? undefined) : undefined,
+      naca: rd && !fehleinsatz ? (f.naca ?? undefined) : undefined,
+      altersgruppe: rd && !fehleinsatz ? (f.alter ?? undefined) : undefined,
+      notarztVorOrt: rd && !fehleinsatz ? (f.notarzt ?? undefined) : undefined,
       ausgang: rd || f.ausgang === 'fehleinsatz' ? (f.ausgang ?? undefined) : undefined,
-      diagnoseId: rd ? f.diagnose[0] : undefined,
-      leitstelleDiagnoseId: rd ? f.leitstelle[0] : undefined,
-      alarmBewertung: rd ? (f.bewertung ?? undefined) : undefined,
-      massnahmen: f.massnahmen.length > 0 ? f.massnahmen : undefined,
-      atemschutz: f.atemschutz ? true : undefined,
-      atemschutzMin: f.atemschutz ? f.atemschutzMin : undefined,
+      diagnoseId: rd && !fehleinsatz ? f.diagnose[0] : undefined,
+      leitstelleDiagnoseId: rd && !fehleinsatz ? f.leitstelle[0] : undefined,
+      alarmBewertung: rd && !fehleinsatz ? (f.bewertung ?? undefined) : undefined,
+      massnahmen: !fehleinsatz && f.massnahmen.length > 0 ? f.massnahmen : undefined,
+      atemschutz: !fehleinsatz && f.atemschutz ? true : undefined,
+      atemschutzMin: !fehleinsatz && f.atemschutz ? f.atemschutzMin : undefined,
       alarmstufe: !rd && stufe != null ? stufe : undefined,
     });
     try {
@@ -536,7 +541,9 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
 
   const vorschlag = typ ? bewertungVorschlag({ typ, naca: f.naca, ausgang: f.ausgang }) : null;
   const ergebnisSumme =
-    bereich === 'RD'
+    fehleinsatz
+      ? 'Fehleinsatz'
+      : bereich === 'RD'
       ? [
           f.ausgang ? AUSGANG_INFO[f.ausgang].kurz : '',
           f.naca != null ? `NACA ${NACA_INFO[f.naca - 1]?.roemisch ?? ''}` : '',
@@ -713,21 +720,27 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
       {bereich === 'RD' && (
         <Aufklappen titel="Ergebnis und Befund" zusatz={ergebnisSumme || undefined} offen={ergebnisOffen} onToggle={() => setErgebnisOffen((o) => !o)}>
           <AusgangWahl wert={f.ausgang} onChange={waehleAusgang} />
-          <NacaWahl wert={f.naca} onChange={(naca) => set({ naca })} />
-          <KatalogAuswahl
-            label="Verdachtsdiagnose"
-            katalogTyp="diagnose"
-            vorschlaege={diagnosen.vorschlaege}
-            alle={diagnosen.alle}
-            ausgewaehlt={f.diagnose}
-            onChange={(ids) => set({ diagnose: ids })}
-            klein
-            nutzung={diagnosen.zaehler}
-            namenAusgewaehlt={diagnosen.namen}
-            hinweis="Dein Befund vor Ort. Was fehlt, legst du mit „+ Neu“ an."
-          />
-          <AlterWahl wert={f.alter} onChange={(alter) => set({ alter })} />
-          <JaNein label="Notarzt vor Ort" wert={f.notarzt} onChange={(notarzt) => set({ notarzt })} fehler={fehler.notarzt} />
+          {fehleinsatz ? (
+            <p className="hinweis">Bei einem Fehleinsatz entfallen Befund, Maßnahmen und Bewertung.</p>
+          ) : (
+            <>
+              <NacaWahl wert={f.naca} onChange={(naca) => set({ naca })} />
+              <KatalogAuswahl
+                label="Verdachtsdiagnose"
+                katalogTyp="diagnose"
+                vorschlaege={diagnosen.vorschlaege}
+                alle={diagnosen.alle}
+                ausgewaehlt={f.diagnose}
+                onChange={(ids) => set({ diagnose: ids })}
+                klein
+                nutzung={diagnosen.zaehler}
+                namenAusgewaehlt={diagnosen.namen}
+                hinweis="Dein Befund vor Ort. Was fehlt, legst du mit „+ Neu“ an."
+              />
+              <AlterWahl wert={f.alter} onChange={(alter) => set({ alter })} />
+              <JaNein label="Notarzt vor Ort" wert={f.notarzt} onChange={(notarzt) => set({ notarzt })} fehler={fehler.notarzt} />
+            </>
+          )}
         </Aufklappen>
       )}
 
@@ -739,8 +752,8 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
             label="Fehleinsatz"
             hinweis="Keine Einsatzstelle oder kein Einsatzgrund vorgefunden, z. B. Fehlalarm oder abgebrochen."
           />
-          <Toggle an={f.atemschutz} onChange={(atemschutz) => set({ atemschutz })} label="Atemschutzeinsatz" />
-          {f.atemschutz && (
+          {!fehleinsatz && <Toggle an={f.atemschutz} onChange={(atemschutz) => set({ atemschutz })} label="Atemschutzeinsatz" />}
+          {!fehleinsatz && f.atemschutz && (
             <Feld label="Dauer unter Atemschutz">
               <Stepper label="Minuten unter Atemschutz" wert={f.atemschutzMin} min={5} max={240} schritt={5} onChange={(atemschutzMin) => set({ atemschutzMin })} einheit="min" />
             </Feld>
@@ -748,7 +761,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
         </Aufklappen>
       )}
 
-      {bereich && (
+      {bereich && !fehleinsatz && (
         <Aufklappen
           titel={bereich === 'FW' ? 'Maßnahmen auf Befehl' : 'Maßnahmen und Medikamente'}
           zusatz={f.massnahmen.length > 0 ? `${f.massnahmen.length} Maßnahme${f.massnahmen.length === 1 ? '' : 'n'}` : undefined}
@@ -769,7 +782,7 @@ function Formular({ bestehend, start, entwurfGeladen, onVerwerfen }: FormProps) 
         </Aufklappen>
       )}
 
-      {bereich === 'RD' && (
+      {bereich === 'RD' && !fehleinsatz && (
         <Aufklappen titel="Alarmierung bewerten" zusatz={bewertungSumme} offen={bewertungOffen} onToggle={() => setBewertungOffen((o) => !o)}>
           <AlarmierungBewerten
             bewertung={f.bewertung}

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { berechneStatistik } from '../domain/stats';
 import { berechneUebungen } from '../domain/uebungen';
 import { fmtSaldo, fmtStunden } from '../domain/time';
-import type { Dienst } from '../domain/types';
+import { statistikBereich, type Dienst } from '../domain/types';
 import { navigate } from '../router';
 import { laufenderDienst, useDaten } from '../state/daten';
 import { Abschnitt, Knopf, Leer, Meldung } from '../ui/controls';
@@ -27,14 +27,15 @@ export function Start() {
   const [anzahl, setAnzahl] = useState(SEITE);
   const jetzt = Date.now();
   const jahr = new Date(jetzt).getFullYear();
+  const bereich = statistikBereich(einst.bereiche);
 
   const stat = useMemo(
-    () => berechneStatistik(dienste, einsaetze, { jahr, bereich: 'alle', dienstart: 'alle' }, einst.wachzeitMitDienstRand, uebungen),
-    [dienste, einsaetze, uebungen, jahr, einst.wachzeitMitDienstRand],
+    () => berechneStatistik(dienste, einsaetze, { jahr, bereich, dienstart: 'alle' }, einst.wachzeitMitDienstRand, uebungen),
+    [dienste, einsaetze, uebungen, jahr, bereich, einst.wachzeitMitDienstRand],
   );
   const uebung = useMemo(
-    () => berechneUebungen(dienste, uebungen, { jahr, bereich: 'alle', dienstart: 'alle' }, katalogMap, einsaetze),
-    [dienste, uebungen, katalogMap, einsaetze, jahr],
+    () => berechneUebungen(dienste, uebungen, { jahr, bereich, dienstart: 'alle' }, katalogMap, einsaetze),
+    [dienste, uebungen, katalogMap, einsaetze, jahr, bereich],
   );
   const laufend = laufenderDienst(daten, jetzt);
   const laufendId = laufend?.id;
@@ -113,7 +114,7 @@ export function Start() {
 
       <Abschnitt titel={`${jahr} bisher`}>
         <KpiRaster>
-          <Kpi wert={stat.anzahl} label={stat.anzahl === 1 ? 'Einsatz' : 'Einsätze'} zusatz={stat.anzahl > 0 ? `RD ${stat.rd} · FW ${stat.fw}` : undefined} />
+          <Kpi wert={stat.anzahl} label={stat.anzahl === 1 ? 'Einsatz' : 'Einsätze'} zusatz={stat.anzahl > 0 && bereich === 'alle' ? `RD ${stat.rd} · FW ${stat.fw}` : undefined} />
           <Kpi wert={stat.dienste} label={stat.dienste === 1 ? 'Dienst' : 'Dienste'} zusatz={stat.einsaetzeProDienst != null ? `Ø ${stat.einsaetzeProDienst.toLocaleString('de-DE', { maximumFractionDigits: 1 })} Einsätze` : undefined} />
           <Kpi wert={<span className={saldo > 0 ? 'text-plus' : saldo < 0 ? 'text-minus' : undefined}>{fmtSaldo(saldo)}</span>} label="Über-/Minusstunden" zusatz={stat.ueberstunden.diensteMitPlus + stat.ueberstunden.diensteMitMinus > 0 ? 'Saldo' : undefined} />
           {uebung.minuten > 0 && (

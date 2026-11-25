@@ -6,7 +6,9 @@ export const THEME_SCHLUESSEL = 'einsatzlog.theme';
 
 export function mergeEinstellungen(roh: unknown): Einstellungen {
   const gespeichert = roh && typeof roh === 'object' ? (roh as Partial<Einstellungen>) : {};
-  return { ...STANDARD_EINSTELLUNGEN, ...gespeichert };
+  const e = { ...STANDARD_EINSTELLUNGEN, ...gespeichert };
+  if (e.bereiche !== 'rd' && e.bereiche !== 'fw') e.bereiche = 'beide';
+  return e;
 }
 
 export async function ladeEinstellungen(): Promise<Einstellungen> {

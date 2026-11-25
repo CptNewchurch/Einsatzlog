@@ -15,7 +15,7 @@ import { berechneUebungen, berechneUebungsMassnahmen, waehleUebungen, type Uebun
 import { berechneTriage } from '../domain/triageStats';
 import { stichwortText, TYP_INFO } from '../domain/stichwort';
 import { fmtDauer, fmtSaldo, fmtStunden, fmtZahl } from '../domain/time';
-import { bereichVon, DURCHFUEHRUNG_INFO, FW_GRUPPE_NAME, type MassnahmeArt } from '../domain/types';
+import { bereichVon, DURCHFUEHRUNG_INFO, FW_GRUPPE_NAME, statistikBereich, type MassnahmeArt } from '../domain/types';
 import { navigate } from '../router';
 import { katalogName, useDaten } from '../state/daten';
 import { Balken, ChartKarte, FarbLegende, Saeulen, SaldoSaeulen, ZeitBalken } from '../ui/charts';
@@ -144,7 +144,10 @@ export function Statistik() {
   const hatUebungsdienst = useMemo(() => dienste.some((d) => d.uebungsdienst), [dienste]);
 
   const [jahrRoh, setJahrRoh] = useState<number | null | undefined>(gemerkt.jahr);
-  const [bereich, setBereichRoh] = useState<StatFilter['bereich']>(gemerkt.bereich);
+  const [bereichRoh, setBereichRoh] = useState<StatFilter['bereich']>(gemerkt.bereich);
+  // Wer nur einen Bereich nutzt, sieht nur dessen Auswertung und keinen Bereichsfilter.
+  const festerBereich = statistikBereich(einst.bereiche);
+  const bereich = festerBereich !== 'alle' ? festerBereich : bereichRoh;
   const [dienstartRoh, setDienstartRoh] = useState<StatFilter['dienstart']>(gemerkt.dienstart);
 
   const aktuell = new Date().getFullYear();
@@ -228,16 +231,18 @@ export function Statistik() {
             <Chip key={j} aktiv={jahr === j} onClick={() => setJahr(j)}>{j}</Chip>
           ))}
         </ChipReihe>
-        <Segment<StatFilter['bereich']>
-          label="Bereich"
-          wert={bereich}
-          onChange={setBereich}
-          optionen={[
-            { wert: 'alle', label: 'Alle' },
-            { wert: 'RD', label: 'Rettungsdienst', ton: 'rd' },
-            { wert: 'FW', label: 'Feuerwehr', ton: 'fw' },
-          ]}
-        />
+        {festerBereich === 'alle' && (
+          <Segment<StatFilter['bereich']>
+            label="Bereich"
+            wert={bereich}
+            onChange={setBereich}
+            optionen={[
+              { wert: 'alle', label: 'Alle' },
+              { wert: 'RD', label: 'Rettungsdienst', ton: 'rd' },
+              { wert: 'FW', label: 'Feuerwehr', ton: 'fw' },
+            ]}
+          />
+        )}
         {(hatZusatz || hatUebungsdienst) && (
           <Segment<StatFilter['dienstart']>
             label="Dienstart"

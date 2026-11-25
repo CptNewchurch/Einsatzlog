@@ -142,7 +142,7 @@ export function DienstDetail({ id }: { id: number }) {
         )}
         {(!uebungsdienst || einsaetze.length > 0) && (
           <>
-            <Kpi wert={einsaetze.length} label={einsaetze.length === 1 ? 'Einsatz' : 'Einsätze'} zusatz={einsaetze.length > 0 ? `RD ${rd} · FW ${fw}` : undefined} />
+            <Kpi wert={einsaetze.length} label={einsaetze.length === 1 ? 'Einsatz' : 'Einsätze'} zusatz={einsaetze.length > 0 && daten.einst.bereiche === 'beide' ? `RD ${rd} · FW ${fw}` : undefined} />
             <Kpi wert={fmtDauer(z.einsatzMin)} label="Im Einsatz" zusatz={`${anteil} % des Dienstes`} />
           </>
         )}

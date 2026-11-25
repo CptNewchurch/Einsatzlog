@@ -137,8 +137,8 @@ export function Einsaetze() {
       </div>
       <ChipReihe label="Einsatzart">
         <Chip klein aktiv={bereich === 'alle'} onClick={() => setBereich('alle')}>Alle</Chip>
-        <Chip klein ton="rd" aktiv={bereich === 'RD'} onClick={() => setBereich(bereich === 'RD' ? 'alle' : 'RD')}>Rettungsdienst</Chip>
-        <Chip klein ton="fw" aktiv={bereich === 'FW'} onClick={() => setBereich(bereich === 'FW' ? 'alle' : 'FW')}>Feuerwehr</Chip>
+        {daten.einst.bereiche !== 'fw' && <Chip klein ton="rd" aktiv={bereich === 'RD'} onClick={() => setBereich(bereich === 'RD' ? 'alle' : 'RD')}>Rettungsdienst</Chip>}
+        {daten.einst.bereiche !== 'rd' && <Chip klein ton="fw" aktiv={bereich === 'FW'} onClick={() => setBereich(bereich === 'FW' ? 'alle' : 'FW')}>Feuerwehr</Chip>}
         <Chip klein ton="ue" aktiv={nurUebungen} onClick={() => setBereich(nurUebungen ? 'alle' : 'UE')}>Übung</Chip>
         {!nurUebungen && <Chip klein aktiv={offen} onClick={() => setOffen((o) => !o)}>Status 2 fehlt</Chip>}
       </ChipReihe>

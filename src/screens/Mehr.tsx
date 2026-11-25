@@ -14,7 +14,7 @@ export function Mehr() {
     einst.letztesBackup == null ? 'Noch nie gesichert' : `Zuletzt am ${fmtDatum(einst.letztesBackup)}`;
 
   const zeilen: { pfad: string; titel: string; info: string; hinweis?: boolean }[] = [
-    { pfad: '/mehr/einstellungen', titel: 'Einstellungen', info: 'Farbschema, Dienstbeginn, Auswertung' },
+    { pfad: '/mehr/einstellungen', titel: 'Einstellungen', info: 'Bereiche, Farbschema, Dienstbeginn, Auswertung' },
     { pfad: '/mehr/kataloge', titel: 'Listen pflegen', info: 'Stichworte, Maßnahmen, Wachen, Standorte' },
     { pfad: '/mehr/backup', titel: 'Sicherung', info: `${backupInfo} · CSV-Export`, hinweis: faellig },
     { pfad: '/mehr/ueber', titel: 'Über Einsatzlog', info: `Version ${APP_VERSION}, Datenschutz, Quellen` },

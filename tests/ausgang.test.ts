@@ -130,3 +130,20 @@ describe('Auswertung mit Transport mit und ohne NA', () => {
     expect(transportZahlen([])).toEqual({ gesamt: 0, mitNa: 0, ohneNa: 0 });
   });
 });
+
+describe('Bereiche', () => {
+  it('statistikBereich beschränkt die Auswertung auf den genutzten Bereich', async () => {
+    const { statistikBereich } = await import('../src/domain/types');
+    expect(statistikBereich('beide')).toBe('alle');
+    expect(statistikBereich(undefined)).toBe('alle');
+    expect(statistikBereich('rd')).toBe('RD');
+    expect(statistikBereich('fw')).toBe('FW');
+  });
+
+  it('Einstellungen ohne oder mit ungültigem Bereich fallen auf „beide“ zurück', async () => {
+    const { mergeEinstellungen } = await import('../src/db/einstellungen');
+    expect(mergeEinstellungen(undefined).bereiche).toBe('beide');
+    expect(mergeEinstellungen({ bereiche: 'xyz' }).bereiche).toBe('beide');
+    expect(mergeEinstellungen({ bereiche: 'fw' }).bereiche).toBe('fw');
+  });
+});

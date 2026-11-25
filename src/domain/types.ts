@@ -302,8 +302,21 @@ export interface Einsatz {
 
 export type ThemeWahl = 'system' | 'light' | 'dark';
 
+/**
+ * Für welche Bereiche die App genutzt wird. Der nicht genutzte Bereich wird in Auswahl, Listen und
+ * Statistik ausgeblendet. Die Daten bleiben erhalten. Wer nur den Rettungsdienst nutzt, kann Feuerwehr-Einsätze
+ * trotzdem erfassen (z. B. RTW bei einem Brand), sie zählen dann aber nicht in der Statistik.
+ */
+export type Bereiche = 'beide' | 'rd' | 'fw';
+export const BEREICHE_NAME: Record<Bereiche, string> = { beide: 'Rettungsdienst und Feuerwehr', rd: 'Nur Rettungsdienst', fw: 'Nur Feuerwehr' };
+
+/** Der Bereich, auf den sich Statistik und Kennzahlen beschränken; bei „beide“ gibt es keine Einschränkung. */
+export const statistikBereich = (b: Bereiche | undefined): Bereich | 'alle' => (b === 'rd' ? 'RD' : b === 'fw' ? 'FW' : 'alle');
+
 export interface Einstellungen {
   theme: ThemeWahl;
+  /** Genutzte Bereiche; ohne Angabe beide. */
+  bereiche: Bereiche;
   backupErinnerungTage: number;
   letztesBackup?: number;
   /** Dienstbeginn bis erste Alarmierung und letzter Status 2 bis Dienstende zählen als Wachzeit. */
@@ -321,6 +334,7 @@ export interface Einstellungen {
 
 export const STANDARD_EINSTELLUNGEN: Einstellungen = {
   theme: 'system',
+  bereiche: 'beide',
   backupErinnerungTage: 30,
   wachzeitMitDienstRand: true,
   region: 'GL',

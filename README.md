@@ -12,6 +12,8 @@ Persönliche Einsatzdokumentation für Notfallsanitäter und Feuerwehr: Dienste 
   - **Alarmierung bewerten**: passend, zu hoch oder zu niedrig – mit automatischem Vorschlag aus NACA und Ergebnis.
   - **Maßnahmen und Medikamente** nach dem Gemeinsamen Kompendium Rettungsdienst 2026, getrennt nach Vorabdelegation, eigenverantwortlich und auf Anordnung.
   - **Maßnahmen auf Befehl** im Feuerwehreinsatz (z. B. Löschangriff, Türöffnung, Messen) aus einer eigenen, wachsenden Liste in fünf Gruppen.
+- **Bereiche:** In den Einstellungen wählst du, ob du Rettungsdienst, Feuerwehr oder beides nutzt. Der nicht genutzte Bereich verschwindet aus Einsatzarten, Listen und Statistik. Im reinen Rettungsdienst bleiben Feuerwehr-Einsätze über „Feuerwehr …“ erfassbar, sie zählen dann nicht in der Statistik.
+- **Fehleinsatz:** Bei diesem Ergebnis entfallen Befund, Maßnahmen, Bewertung und Atemschutz.
 - **Übungen** als eigene Einsatzart neben Rettungsdienst und Feuerwehr: Art, Thema, Ort, Beginn und Ende. Sie zählen nicht als Einsatz und haben eine eigene Auswertung. Die Übungszeit in der Schicht wird aus der Wachzeit herausgerechnet, in einem Übungsdienst zählt die ganze Dienstzeit als Übung.
   - **Atemschutz:** Eine Übung lässt sich als Atemschutzeinsatz werten, mit der Zeit unter Atemschutz. Die Statistik zählt Einsätze und Übungen zusammen und zeigt beides auch getrennt.
   - **Maßnahmen in Übungen** aus der Liste der Feuerwehr oder des Rettungsdienstes, ohne Rechtsgrundlage. Sie werden getrennt bei den Übungen gezählt und nicht im Maßnahmen-Nachweis der Einsätze.

@@ -26,7 +26,7 @@ import { Seite } from '../ui/seite';
 /* ---------- Übersicht ---------- */
 
 export function KatalogUebersicht() {
-  const { katalog } = useDaten();
+  const { katalog, einst } = useDaten();
   const zahlen = useMemo(() => {
     const m = new Map<KatalogTyp, number>();
     katalog.forEach((k) => k.aktiv && m.set(k.typ, (m.get(k.typ) ?? 0) + 1));
@@ -39,7 +39,7 @@ export function KatalogUebersicht() {
         Neue Einträge legst du am schnellsten direkt beim Erfassen mit „+ Neu“ an. Hier benennst du sie um, blendest sie aus oder löschst, was du nie benutzt hast.
       </p>
       <ul className="menue">
-        {KATALOG_REIHENFOLGE.map((typ) => (
+        {KATALOG_REIHENFOLGE.filter((typ) => !(einst.bereiche === 'fw' && (typ === 'massnahme' || typ === 'diagnose')) && !(einst.bereiche === 'rd' && typ === 'fwmassnahme')).map((typ) => (
           <li key={typ}>
             <button type="button" className="menuezeile" onClick={() => navigate(katalogPfad(typ))}>
               <span className="menuezeile__text">
